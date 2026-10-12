@@ -1,0 +1,114 @@
+openapi: 3.0.3
+
+info:
+  title: Madrigal API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /api/v1/analysis/runs:
+    post:
+      tags:
+        - Analysis
+      summary: Создать запуск анализа
+      operationId: createAnalysisRun
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - revisionId
+                - assemblyId
+              properties:
+                revisionId:
+                  type: string
+                  minLength: 1
+                assemblyId:
+                  type: string
+                  minLength: 1
+      responses:
+        '202':
+          description: Запуск анализа принят
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - runId
+                  - status
+                properties:
+                  runId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, running, completed, failed]
+        '400':
+          description: Некорректные данные запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+                
+  /api/v1/analysis/runs/{runId}:
+    get:
+      tags:
+        - Analysis
+      summary: Получить информацию о запуске анализа
+      operationId: getAnalysisRun
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+
+      responses:
+        '200':
+          description: Информация о запуске анализа
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - runId
+                  - status
+                  - revisionId
+                  - assemblyId
+                properties:
+                  runId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [pending, running, completed, failed]
+                  revisionId:
+                    type: string
+                  assemblyId:
+                    type: string
+
+        '404':
+          description: Запуск анализа не найден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
+
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string

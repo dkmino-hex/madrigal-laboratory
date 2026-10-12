@@ -1,0 +1,25 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: gateway
+    ports:
+      - "8080:8080"
+
+  analysis:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        SERVICE: analysis
+    ports:
+      - "8083:8083"
+    environment:
+      DB_PATH: /data/analysis.db
+    volumes:
+      - analysis-data:/data
+
+volumes:
+  analysis-data:
