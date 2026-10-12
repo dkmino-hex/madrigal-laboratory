@@ -1,0 +1,14 @@
+/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal
+
+/docs/
+/bin/
+/dist/
+/coverage.out
+.env
+.env.*
+!.env.example
+*_test.go
