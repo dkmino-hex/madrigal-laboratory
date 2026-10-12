@@ -1,4 +1,3 @@
--- Projects own settings; the nullable current pointer permits transactional creation.
 CREATE TABLE projects (
     id TEXT PRIMARY KEY CHECK (length(id) > 0),
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),

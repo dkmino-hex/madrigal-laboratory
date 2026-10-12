@@ -1,0 +1,1343 @@
+{
+  "probeScope": "Provided fixtures only; one IPv4 TCP flow per capture, no sequence wrap; not the production reassembler.",
+  "framingCandidate": {
+    "magicHex": "a65c",
+    "headerLength": 8,
+    "lengthOffset": 2,
+    "lengthWidth": 2,
+    "endian": "big",
+    "totalLength": "8 + payloadLength",
+    "onIncompleteOrConflict": "INCONCLUSIVE; no zero filling or magic resynchronization"
+  },
+  "captures": [
+    {
+      "file": "additional/04_new_observations.pcapng",
+      "sha256": "a7ad6db37afc64d5516607efa16e33448ec93f460ec1a0c19db5b067593eccf0",
+      "packetCount": 77,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42013",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 105,
+          "logicalLength": 105,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "7b69723bc50251bfa731d749d165fa5d506e5c2e452efc952f6de733f99dd682",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 24,
+              "payloadLength": 16,
+              "headerHex": "a65c001000020020"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42013",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "5e48cb352c0c9ef13b3a83ccb17b536bf05918f17fd0fa34cd235f2784df8de0",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 25,
+              "payloadLength": 17,
+              "headerHex": "a65c001100020120"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 12,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/01_retransmission.pcap",
+      "sha256": "f4db652ada2a19dbbd45fc19a4b7b40d4fd04dc533653bd3988926a7f15e8085",
+      "packetCount": 52,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [
+            11
+          ],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "b6bde4a23a720a2bec82c33bad70cfa17f4a83a71abafea44be691693fac2c31",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 17,
+              "payloadLength": 9,
+              "headerHex": "a65c000900020130"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              },
+              {
+                "packetNo": 11,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 57
+              },
+              {
+                "packetNo": 11,
+                "frameOffset": 57
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/02_reordered.pcapng",
+      "sha256": "d039dd254f96c8942d0560bf81f14398b6327279112587a87ec44b88d2a156e8",
+      "packetCount": 51,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [
+            6
+          ],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "b6bde4a23a720a2bec82c33bad70cfa17f4a83a71abafea44be691693fac2c31",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 17,
+              "payloadLength": 9,
+              "headerHex": "a65c000900020130"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 57
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/03_missing_segment.pcap",
+      "sha256": "264e1503f162fe2979154829016a122a3a01b55fee56cdef045539c5420bd160",
+      "packetCount": 50,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "INCONCLUSIVE",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 244,
+          "logicalLength": 279,
+          "missingOffsets": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34
+          ],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": null,
+          "messageCount": null,
+          "firstMessages": [],
+          "firstLengthFieldSources": []
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/04_snaplen_truncated.pcapng",
+      "sha256": "de6b57e1e3d1c086aa84bbff62ceb462d4efbcdc13f1cf61c1ac97e765f952b9",
+      "packetCount": 51,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [
+        10
+      ],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "INCONCLUSIVE",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 248,
+          "logicalLength": 279,
+          "missingOffsets": [
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            11,
+            12,
+            13,
+            14,
+            15,
+            16,
+            17,
+            18,
+            19,
+            20,
+            21,
+            22,
+            23,
+            24,
+            25,
+            26,
+            27,
+            28,
+            29,
+            30,
+            31,
+            32,
+            33,
+            34
+          ],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [
+            10
+          ],
+          "checksumUncertainPackets": [],
+          "streamSHA256": null,
+          "messageCount": null,
+          "firstMessages": [],
+          "firstLengthFieldSources": []
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/05_conflicting_overlap.pcap",
+      "sha256": "abee9bbd87963c263eace6fb948f655590096296eaf1cf2264f04a0a93440ac9",
+      "packetCount": 52,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "INCONCLUSIVE",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [
+            13
+          ],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": null,
+          "messageCount": null,
+          "firstMessages": [],
+          "firstLengthFieldSources": []
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/06_missing_beginning.pcapng",
+      "sha256": "850aab35d90d265e12cc29a41062da11a6c594d7b0f85240921316c2f7012806",
+      "packetCount": 44,
+      "connectionStarts": [],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 0,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": false,
+          "structuralStatus": "INCONCLUSIVE",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 74,
+          "logicalLength": 74,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": null,
+          "messageCount": null,
+          "firstMessages": [],
+          "firstLengthFieldSources": []
+        },
+        {
+          "generation": 0,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": false,
+          "structuralStatus": "INCONCLUSIVE",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": null,
+          "messageCount": null,
+          "firstMessages": [],
+          "firstLengthFieldSources": []
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/07_checksum_offload.pcap",
+      "sha256": "b2c665d464ef2d539b740cb42c53051743d16b95efc309c4942c61daaa849692",
+      "packetCount": 51,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [
+        4,
+        6,
+        8,
+        12,
+        14,
+        16,
+        18,
+        22,
+        26,
+        28,
+        30,
+        34,
+        36,
+        38
+      ],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NEEDS_CAPTURE_CONTEXT",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [
+            4,
+            6,
+            8,
+            12,
+            14,
+            16,
+            18,
+            22,
+            26,
+            28,
+            30,
+            34,
+            36,
+            38
+          ],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "b6bde4a23a720a2bec82c33bad70cfa17f4a83a71abafea44be691693fac2c31",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 17,
+              "payloadLength": 9,
+              "headerHex": "a65c000900020130"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 57
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "diagnostics/08_bad_checksum.pcapng",
+      "sha256": "53c2ad8535e1bd3853129c10ec4d6277da2152199c10039d5e2ca3aa9316a1b9",
+      "packetCount": 51,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [
+        10
+      ],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NEEDS_CAPTURE_CONTEXT",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [
+            10
+          ],
+          "streamSHA256": "b6bde4a23a720a2bec82c33bad70cfa17f4a83a71abafea44be691693fac2c31",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 17,
+              "payloadLength": 9,
+              "headerHex": "a65c000900020130"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 57
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "research/01_configuration.pcap",
+      "sha256": "6e9019561d4ae13c0622dc2ba11e87edc27addfe4679b23f65a3d9a57e387f7a",
+      "packetCount": 158,
+      "connectionStarts": [
+        1,
+        96
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42010",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 102,
+          "logicalLength": 102,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "30e1f1889ddbde4a70f07c16f970ec557e353daa992d7e5eee6f18aa3b161122",
+          "messageCount": 9,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 17,
+              "payloadLength": 9,
+              "headerHex": "a65c000900020020"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42010",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 165,
+          "logicalLength": 165,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "c8f0d7e1d69a18b3ae4327f0cab3d1458ed73c1fda9ac5513bae53e7553b5c8a",
+          "messageCount": 9,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00020120"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 12,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 2,
+          "source": "10.77.0.10:42010",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 54,
+          "logicalLength": 54,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "a75bc00fe0e33eac2705c1e13f330ad1dac76f4dad5ac9c98f6228bef96d783a",
+          "messageCount": 5,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 20,
+              "payloadLength": 12,
+              "headerHex": "a65c000c00020020"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 99,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 101,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 2,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42010",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 122,
+          "logicalLength": 122,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "ca8e7b2cb7560d1b0f04dd56e047b5291f582a34b8542dd19b89c3192e64d0f5",
+          "messageCount": 5,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 21,
+              "payloadLength": 13,
+              "headerHex": "a65c000d00020120"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 105,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 107,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "research/02_variations.pcapng",
+      "sha256": "ce1b47e6e471b9e65369197b252ee787ae87107adaf1de02980f6f7db70bd4c5",
+      "packetCount": 149,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42011",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 180,
+          "logicalLength": 180,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "514afb734ad458815f284832fdb1016770825b01e155d810a701c923d6cdae80",
+          "messageCount": 15,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 15,
+              "payloadLength": 7,
+              "headerHex": "a65c000700020020"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42011",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 428,
+          "logicalLength": 428,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "02865c428f51621b226ca6f962787914e6c8d2777655b27a0ee85c73dfd337da",
+          "messageCount": 15,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 16,
+              "payloadLength": 8,
+              "headerHex": "a65c000800020120"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 12,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "file": "research/03_combined_messages.pcap",
+      "sha256": "3590b1111504efa74e5fc841c85ecbd93221653e2d09a0b206c91942b7940407",
+      "packetCount": 51,
+      "connectionStarts": [
+        1
+      ],
+      "truncatedPackets": [],
+      "checksumUncertainPackets": [],
+      "streams": [
+        {
+          "generation": 1,
+          "source": "10.77.0.10:42012",
+          "destination": "10.77.0.20:46123",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 79,
+          "logicalLength": 79,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "d5509764c2e148048ad8d533354b678f40cca037ddd9bd0e029f24fc2097741d",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 8,
+              "payloadLength": 0,
+              "headerHex": "a65c000000010010"
+            },
+            {
+              "offset": 8,
+              "length": 9,
+              "payloadLength": 1,
+              "headerHex": "a65c000100020030"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 4,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 6,
+                "frameOffset": 54
+              }
+            ]
+          ]
+        },
+        {
+          "generation": 1,
+          "source": "10.77.0.20:46123",
+          "destination": "10.77.0.10:42012",
+          "knownStart": true,
+          "structuralStatus": "KNOWN_BYTES",
+          "checksumPolicyStatus": "NO_MISMATCH_OBSERVED",
+          "knownBytes": 279,
+          "logicalLength": 279,
+          "missingOffsets": [],
+          "conflictOffsets": [],
+          "duplicatePackets": [],
+          "reorderedPackets": [],
+          "truncatedPackets": [],
+          "checksumUncertainPackets": [],
+          "streamSHA256": "b6bde4a23a720a2bec82c33bad70cfa17f4a83a71abafea44be691693fac2c31",
+          "messageCount": 8,
+          "firstMessages": [
+            {
+              "offset": 0,
+              "length": 18,
+              "payloadLength": 10,
+              "headerHex": "a65c000a00010110"
+            },
+            {
+              "offset": 18,
+              "length": 17,
+              "payloadLength": 9,
+              "headerHex": "a65c000900020130"
+            }
+          ],
+          "firstLengthFieldSources": [
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 56
+              }
+            ],
+            [
+              {
+                "packetNo": 10,
+                "frameOffset": 57
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

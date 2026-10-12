@@ -2,9 +2,9 @@
 *.go text eol=lf
 *.sql text eol=lf
 *.md text eol=lf
+*.sh text eol=lf
 go.mod text eol=lf
 go.sum text eol=lf
 
-# Preserve supplied fixtures byte for byte, including the CSV/JSON/README.
 testdata/** -text
 

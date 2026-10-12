@@ -1,0 +1,35 @@
+name: madrigal
+
+services:
+  laboratory:
+    build:
+      context: .
+    environment:
+      WORKSPACE_DB_PATH: /data/workspace/workspace.sqlite
+      WORKSPACE_HTTP_ADDR: 0.0.0.0:8081
+      CAPTURE_DB_PATH: /data/capture/capture.sqlite
+      CAPTURE_HTTP_ADDR: 0.0.0.0:8082
+      CAPTURE_DATA_DIR: /data/capture
+    ports:
+      - "127.0.0.1:8081:8081"
+      - "127.0.0.1:8082:8082"
+    volumes:
+      - workspace-files:/data/workspace
+      - capture-files:/data/capture
+      - ./testdata/sample_protocol:/fixtures:ro
+    networks:
+      default:
+        aliases:
+          - workspace-service
+          - capture-service
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8081/readyz && wget -q -O /dev/null http://127.0.0.1:8082/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    init: true
+    stop_grace_period: 20s
+
+volumes:
+  capture-files:
+  workspace-files:

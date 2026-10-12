@@ -1,4 +1,3 @@
--- Interface metadata defines interpretation of the original timestamp ticks.
 CREATE TRIGGER capture_interfaces_no_update BEFORE UPDATE ON capture_interfaces
 BEGIN SELECT RAISE(ABORT, 'capture interfaces are immutable'); END;
 CREATE TRIGGER capture_interfaces_no_delete BEFORE DELETE ON capture_interfaces

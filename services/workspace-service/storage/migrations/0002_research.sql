@@ -52,7 +52,6 @@ CREATE TABLE observations (
 ) STRICT;
 CREATE INDEX idx_observations_project ON observations(project_id, kind, status, created_at);
 
--- Sources are external Capture references; they survive changes of interpretation.
 CREATE TABLE evidence (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id),

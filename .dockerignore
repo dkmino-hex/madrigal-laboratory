@@ -1,0 +1,8 @@
+.git
+.env
+.env.*
+data
+docs
+bin
+dist
+testdata/sample_protocol.tar.zst

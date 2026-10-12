@@ -1,4 +1,3 @@
-// Package storage owns the capture database schema.
 package storage
 
 import (
@@ -12,7 +11,6 @@ import (
 //go:embed migrations/*.sql
 var Migrations embed.FS
 
-// Open opens the private service database and applies its migrations.
 func Open(ctx context.Context, path string) (*sql.DB, error) {
 	db, err := database.Open(ctx, path)
 	if err != nil {

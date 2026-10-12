@@ -34,7 +34,6 @@ CREATE TABLE idempotency_keys (
 ) STRICT;
 CREATE INDEX idx_idempotency_expiry ON idempotency_keys(expires_at);
 
--- project_id is an external Workspace ID; there is no cross-service foreign key.
 CREATE TABLE captures (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
@@ -67,7 +66,6 @@ CREATE TABLE capture_interfaces (
     PRIMARY KEY (capture_id, interface_no)
 ) STRICT;
 
--- Exact frame bytes simplify random packet reads. The original file is also kept.
 CREATE TABLE packets (
     capture_id TEXT NOT NULL,
     packet_no INTEGER NOT NULL CHECK (packet_no >= 1),

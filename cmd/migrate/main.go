@@ -8,10 +8,11 @@ import (
 	"io/fs"
 	"os"
 	"os/signal"
-	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/dkmino-hex/madrigal-laboratory/internal/database"
+	runtimecfg "github.com/dkmino-hex/madrigal-laboratory/internal/service"
 	capture "github.com/dkmino-hex/madrigal-laboratory/services/capture-service/storage"
 	workspace "github.com/dkmino-hex/madrigal-laboratory/services/workspace-service/storage"
 )
@@ -28,8 +29,9 @@ func run(args []string, out io.Writer) error {
 	flags.SetOutput(out)
 	service := flags.String("service", "all", "workspace, capture or all")
 	action := flags.String("action", "up", "up or status")
-	dataDir := flags.String("data-dir", "data", "root of private service data")
-	dbPath := flags.String("db", "", "explicit database path; requires a single service")
+	path := flags.String("db", "", "SQLite path for a single service")
+	workspacePath := flags.String("workspace-db", runtimecfg.Env("WORKSPACE_DB_PATH", "data/workspace/workspace.sqlite"), "Workspace SQLite path")
+	capturePath := flags.String("capture-db", runtimecfg.Env("CAPTURE_DB_PATH", "data/capture/capture.sqlite"), "Capture SQLite path")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -42,45 +44,54 @@ func run(args []string, out io.Writer) error {
 	if *service != "workspace" && *service != "capture" && *service != "all" {
 		return fmt.Errorf("unknown service %q", *service)
 	}
-	if *service == "all" && *dbPath != "" {
+	if *service == "all" && *path != "" {
 		return fmt.Errorf("-db requires -service workspace or capture")
+	}
+	type target struct {
+		owner, path string
+		files       fs.FS
+	}
+	targets := []target{}
+	for _, owner := range []string{"workspace", "capture"} {
+		if *service != "all" && *service != owner {
+			continue
+		}
+		selected, files := *workspacePath, fs.FS(workspace.Migrations)
+		if owner == "capture" {
+			selected, files = *capturePath, capture.Migrations
+		}
+		if *path != "" {
+			selected = *path
+		}
+		if strings.TrimSpace(selected) == "" {
+			return fmt.Errorf("%s: set %s_DB_PATH or pass a database path flag", owner, strings.ToUpper(owner))
+		}
+		targets = append(targets, target{owner, selected, files})
 	}
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	ctx, cancel := context.WithTimeout(rootCtx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(rootCtx, 60*time.Second)
 	defer cancel()
-	owners := []string{*service}
-	if *service == "all" {
-		owners = []string{"workspace", "capture"}
-	}
-	for _, owner := range owners {
-		path := *dbPath
-		if path == "" {
-			path = filepath.Join(*dataDir, owner, owner+".sqlite")
-		}
-		var files fs.FS = workspace.Migrations
-		if owner == "capture" {
-			files = capture.Migrations
-		}
-		db, err := database.Open(ctx, path)
+	for _, target := range targets {
+		db, err := database.Open(ctx, target.path)
 		if err != nil {
-			return err
+			return fmt.Errorf("%s: %w", target.owner, err)
 		}
 		if *action == "up" {
-			err = database.Apply(ctx, db, owner, files)
+			err = database.Apply(ctx, db, target.owner, target.files)
 		}
 		var statuses []database.MigrationStatus
 		if err == nil {
-			statuses, err = database.Status(ctx, db, owner, files)
+			statuses, err = database.Status(ctx, db, target.owner, target.files)
 		}
 		closeErr := db.Close()
 		if err != nil {
-			return fmt.Errorf("%s: %w", owner, err)
+			return fmt.Errorf("%s: %w", target.owner, err)
 		}
 		if closeErr != nil {
 			return closeErr
 		}
-		fmt.Fprintf(out, "%s: %s\n", owner, path)
+		fmt.Fprintf(out, "%s: SQLite\n", target.owner)
 		for _, s := range statuses {
 			label := "pending"
 			if s.Applied {
