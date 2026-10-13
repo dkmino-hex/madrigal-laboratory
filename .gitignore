@@ -4,6 +4,7 @@
 *.sqlite-shm
 *.sqlite-journal
 
+/postman/
 /docs/
 /bin/
 /dist/

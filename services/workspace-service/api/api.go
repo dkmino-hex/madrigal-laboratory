@@ -65,6 +65,32 @@ func New(db *sql.DB) http.Handler {
 		}
 		httpapi.JSON(w, 200, p)
 	})
+	mux.HandleFunc("PATCH /api/v1/projects/{projectId}/settings", func(w http.ResponseWriter, r *http.Request) {
+		var input struct {
+			Settings map[string]any `json:"settings"`
+		}
+		if err := httpapi.Decode(w, r, &input); err != nil {
+			httpapi.Error(w, 400, "INVALID_JSON", "expected settings JSON object")
+			return
+		}
+		v, replayed, err := s.UpdateSettings(r.Context(), r.PathValue("projectId"), input.Settings, r.Header.Get("Idempotency-Key"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		if replayed {
+			w.Header().Set("Idempotency-Replayed", "true")
+		}
+		httpapi.JSON(w, 200, v)
+	})
+	mux.HandleFunc("GET /internal/v1/projects/{projectId}/context", func(w http.ResponseWriter, r *http.Request) {
+		context, err := s.SettingsContext(r.Context(), r.PathValue("projectId"), r.URL.Query().Get("settingsVersion"))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		httpapi.JSON(w, 200, context)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, 404, "NOT_FOUND", "route was not found")
 	})

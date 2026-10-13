@@ -31,14 +31,16 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	store := captures.Store{DB: db, Files: files}
+	store := captures.Store{DB: db, Files: files, WorkspaceURL: service.Env("WORKSPACE_INTERNAL_URL", "http://127.0.0.1:8081")}
 	if err = store.AuditOriginals(context.Background()); err != nil {
 		return err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	workerDone := make(chan error, 1)
-	go func() { workerDone <- (jobs.Worker{Store: store.Jobs(), Handlers: map[string]jobs.Handler{}}).Run(ctx) }()
+	go func() {
+		workerDone <- (jobs.Worker{Store: store.Jobs(), Handlers: map[string]jobs.Handler{captures.ImportKind: store.ImportJob, captures.AssembleKind: store.AssembleJob}}).Run(ctx)
+	}()
 	serverDone := make(chan error, 1)
 	go func() { serverDone <- service.Run(service.Env("CAPTURE_HTTP_ADDR", "127.0.0.1:8082"), api.New(store)) }()
 	select {

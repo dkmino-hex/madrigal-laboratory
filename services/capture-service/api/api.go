@@ -39,6 +39,7 @@ func New(store captures.Store) http.Handler {
 	}
 	mux.HandleFunc("GET /api/v1/jobs/{jobId}", handle(false))
 	mux.HandleFunc("POST /api/v1/jobs/{jobId}/cancel", handle(true))
+	registerCapture(mux, store)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		httpapi.Error(w, 404, "NOT_FOUND", "route was not found")
 	})

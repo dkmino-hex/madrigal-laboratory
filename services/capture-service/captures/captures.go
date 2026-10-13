@@ -33,8 +33,9 @@ type Capture struct {
 }
 
 type Store struct {
-	DB    *sql.DB
-	Files *originals.Store
+	DB           *sql.DB
+	Files        *originals.Store
+	WorkspaceURL string
 }
 
 const columns = "id,project_id,sha256,original_name,relative_path,size_bytes,format,status,created_at"
@@ -70,6 +71,10 @@ func (s Store) AuditOriginals(ctx context.Context) error {
 }
 
 func (s Store) AcceptOriginal(ctx context.Context, projectID, name string, input io.Reader) (Capture, jobs.Job, bool, error) {
+	return s.AcceptOriginalWithSettings(ctx, projectID, name, input, "", nil)
+}
+
+func (s Store) AcceptOriginalWithSettings(ctx context.Context, projectID, name string, input io.Reader, settingsVersion string, settings json.RawMessage) (Capture, jobs.Job, bool, error) {
 	if projectID == "" || strings.TrimSpace(name) == "" {
 		return Capture{}, jobs.Job{}, false, errors.New("project and filename are required")
 	}
@@ -101,7 +106,7 @@ func (s Store) AcceptOriginal(ctx context.Context, projectID, name string, input
 	if err != nil {
 		return Capture{}, jobs.Job{}, false, err
 	}
-	j, err := s.Jobs().EnqueueTx(ctx, tx, projectID, ImportKind, &c.ID, map[string]string{"captureId": c.ID, "sha256": obj.SHA256})
+	j, err := s.Jobs().EnqueueTx(ctx, tx, projectID, ImportKind, &c.ID, map[string]any{"captureId": c.ID, "sha256": obj.SHA256, "settingsVersion": settingsVersion, "settings": settings})
 	if err != nil {
 		return Capture{}, jobs.Job{}, false, err
 	}
