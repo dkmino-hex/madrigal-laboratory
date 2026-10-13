@@ -1,114 +1,711 @@
 openapi: 3.0.3
-
 info:
-  title: Madrigal API
+  title: Madrigal Analysis API
   version: 1.0.0
 
 servers:
-  - url: http://localhost:8080
+- url: http://localhost:8080
+security: []
+
+tags:
+- name: Analysis
+  description: Интерпретации, ревизии, preview и запуски анализа
 
 paths:
-  /api/v1/analysis/runs:
+  /api/v1/projects/{projectId}/interpretations:
     post:
       tags:
-        - Analysis
-      summary: Создать запуск анализа
-      operationId: createAnalysisRun
+      - Analysis
+      summary: Создать интерпретацию и первую ревизию
+      operationId: post_projects_projectId_interpretations
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: Ключ идемпотентности для безопасного повтора создания
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required:
-                - revisionId
-                - assemblyId
-              properties:
-                revisionId:
-                  type: string
-                  minLength: 1
-                assemblyId:
-                  type: string
-                  minLength: 1
+              $ref: '#/components/schemas/InterpretationCreateRequest'
       responses:
-        '202':
-          description: Запуск анализа принят
+        '201':
+          description: Ресурс создан
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - runId
-                  - status
-                properties:
-                  runId:
-                    type: string
-                  status:
-                    type: string
-                    enum: [pending, running, completed, failed]
+                $ref: '#/components/schemas/Interpretation'
         '400':
-          description: Некорректные данные запроса
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-                
-  /api/v1/analysis/runs/{runId}:
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
     get:
       tags:
-        - Analysis
-      summary: Получить информацию о запуске анализа
-      operationId: getAnalysisRun
+      - Analysis
+      summary: Получить список интерпретаций и текущих ревизий
+      operationId: get_projects_projectId_interpretations
       parameters:
-        - name: runId
-          in: path
-          required: true
-          schema:
-            type: string
-            minLength: 1
-
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/query_cursor'
+      - $ref: '#/components/parameters/query_limit'
       responses:
         '200':
-          description: Информация о запуске анализа
+          description: Успешный ответ
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - runId
-                  - status
-                  - revisionId
-                  - assemblyId
-                properties:
-                  runId:
-                    type: string
-                  status:
-                    type: string
-                    enum: [pending, running, completed, failed]
-                  revisionId:
-                    type: string
-                  assemblyId:
-                    type: string
-
+                $ref: '#/components/schemas/PagedInterpretations'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
-          description: Запуск анализа не найден
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions:
+    get:
+      tags:
+      - Analysis
+      summary: Получить историю неизменяемых ревизий
+      operationId: get_projects_projectId_interpretations_interpretationId_revisions
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/interpretationId'
+      - $ref: '#/components/parameters/query_cursor'
+      - $ref: '#/components/parameters/query_limit'
+      responses:
+        '200':
+          description: Успешный ответ
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/PagedRevisions'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - Analysis
+      summary: Создать новую неизменяемую ревизию
+      operationId: post_projects_projectId_interpretations_interpretationId_revisions
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/interpretationId'
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: Ключ идемпотентности для безопасного повтора создания
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevisionCreateRequest'
+      responses:
+        '201':
+          description: Ресурс создан
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
 
+  /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions/{revisionId}:
+    get:
+      tags:
+      - Analysis
+      summary: Получить точный JSON ревизии
+      operationId: get_projects_projectId_interpretations_interpretationId_revisions_revisionId
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/interpretationId'
+      - $ref: '#/components/parameters/revisionId'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Revision'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
+  /api/v1/projects/{projectId}/previews:
+    post:
+      tags:
+      - Analysis
+      summary: Предварительно разобрать выбранный диапазон сборки
+      operationId: post_projects_projectId_previews
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewRequest'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
 
+  /api/v1/projects/{projectId}/runs:
+    post:
+      tags:
+      - Analysis
+      summary: Создать запуск анализа и фоновое задание
+      operationId: post_projects_projectId_runs
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - name: Idempotency-Key
+        in: header
+        required: false
+        description: Ключ идемпотентности для безопасного повтора создания
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunCreateRequest'
+      responses:
+        '202':
+          description: Операция принята
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedRun'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+    get:
+      tags:
+      - Analysis
+      summary: Получить историю запусков и краткие сводки
+      operationId: get_projects_projectId_runs
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/query_cursor'
+      - $ref: '#/components/parameters/query_limit'
+      - $ref: '#/components/parameters/query_status'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PagedRuns'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
+  /api/v1/projects/{projectId}/runs/{runId}:
+    get:
+      tags:
+      - Analysis
+      summary: Получить входы, версии и сводку запуска
+      operationId: get_projects_projectId_runs_runId
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/runId'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/projects/{projectId}/runs/{runId}/results:
+    get:
+      tags:
+      - Analysis
+      summary: Получить поля, проверки и контрпримеры постранично
+      operationId: get_projects_projectId_runs_runId_results
+      parameters:
+      - $ref: '#/components/parameters/projectId'
+      - $ref: '#/components/parameters/runId'
+      - $ref: '#/components/parameters/query_cursor'
+      - $ref: '#/components/parameters/query_limit'
+      - $ref: '#/components/parameters/query_status'
+      - $ref: '#/components/parameters/query_ruleId'
+      - $ref: '#/components/parameters/query_source'
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResults'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+          
 components:
+  parameters:
+    query_source:
+      name: source
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Фильтр источника
+    query_ruleId:
+      name: ruleId
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Фильтр правила
+    query_status:
+      name: status
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Фильтр статуса
+    query_limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+      description: Размер страницы
+    query_cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Курсор следующей страницы
+    runId:
+      name: runId
+      in: path
+      required: true
+      schema:
+        type: string
+    projectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+    revisionId:
+      name: revisionId
+      in: path
+      required: true
+      schema:
+        type: string
+    interpretationId:
+      name: interpretationId
+      in: path
+      required: true
+      schema:
+        type: string
   schemas:
     ErrorResponse:
       type: object
       required:
-        - code
-        - message
+      - code
+      - message
       properties:
         code:
           type: string
         message:
           type: string
+        details:
+          description: Дополнительные сведения об ошибке
+    AnalysisResults:
+      type: object
+      required:
+      - fields
+      - checks
+      - counterexamples
+      - page
+      properties:
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisField'
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/CheckResult'
+        counterexamples:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    PageInfo:
+      type: object
+      required:
+      - limit
+      properties:
+        nextCursor:
+          type: string
+        limit:
+          type: integer
+          minimum: 1
+    CheckResult:
+      type: object
+      required:
+      - ruleId
+      - status
+      properties:
+        ruleId:
+          type: string
+        status:
+          type: string
+          enum:
+          - PASS
+          - FAIL
+          - INCONCLUSIVE
+          - NOT_APPLICABLE
+          - UNKNOWN
+        sourceSpan:
+          $ref: '#/components/schemas/SourceSpan'
+        diagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnostic'
+    Diagnostic:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        sourceSpan:
+          $ref: '#/components/schemas/SourceSpan'
+    SourceSpan:
+      type: object
+      description: Предварительная форма точной привязки к исходным пакетам; согласовать с Capture.
+      required:
+      - assemblyId
+      - streamId
+      - startOffset
+      - endOffset
+      properties:
+        assemblyId:
+          type: string
+        streamId:
+          type: string
+        startOffset:
+          type: string
+          description: Начало [start,end), uint64 строкой
+        endOffset:
+          type: string
+          description: Конец [start,end), uint64 строкой
+        packetRefs:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    AnalysisField:
+      type: object
+      required:
+      - name
+      - sourceSpan
+      properties:
+        name:
+          type: string
+        value:
+          description: Типизированное значение поля
+        sourceSpan:
+          $ref: '#/components/schemas/SourceSpan'
+    Run:
+      type: object
+      required:
+      - runId
+      - revisionId
+      - assemblyId
+      - status
+      properties:
+        runId:
+          type: string
+        projectId:
+          type: string
+        revisionId:
+          type: string
+        assemblyId:
+          type: string
+        captureId:
+          type: string
+        settingsVersion:
+          type: string
+        status:
+          type: string
+        summary:
+          type: object
+          additionalProperties: true
+        engineVersions:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    PagedRuns:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Run'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    AcceptedRun:
+      type: object
+      required:
+      - runId
+      - jobId
+      properties:
+        runId:
+          type: string
+        jobId:
+          type: string
+        status:
+          type: string
+    RunCreateRequest:
+      type: object
+      description: Фиксация выбранной ревизии, сборки, фильтров и версии настроек; остальные версии фиксирует сервер.
+      required:
+      - revisionId
+      - assemblyId
+      properties:
+        revisionId:
+          type: string
+        assemblyId:
+          type: string
+        captureId:
+          type: string
+        settingsVersion:
+          type: string
+        filters:
+          type: object
+          additionalProperties: true
+    PreviewResult:
+      type: object
+      required:
+      - messages
+      - fields
+      - unknownRegions
+      - errors
+      properties:
+        messages:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        fields:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalysisField'
+        unknownRegions:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceSpan'
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Diagnostic'
+    PreviewRequest:
+      type: object
+      required:
+      - revisionId
+      - assemblyId
+      - streamId
+      - offset
+      - length
+      properties:
+        revisionId:
+          type: string
+        assemblyId:
+          type: string
+        streamId:
+          type: string
+        offset:
+          type: string
+        length:
+          type: string
+    Revision:
+      type: object
+      required:
+      - revisionId
+      - interpretationId
+      - version
+      - revision
+      properties:
+        revisionId:
+          type: string
+        interpretationId:
+          type: string
+        version:
+          type: integer
+          minimum: 1
+        changeComment:
+          type: string
+        revision:
+          $ref: '#/components/schemas/RevisionDefinition'
+        createdAt:
+          type: string
+          format: date-time
+    RevisionDefinition:
+      type: object
+      description: Предварительная форма. Строгая DSL схемы не задана в исходном документе.
+      required:
+      - fields
+      properties:
+        scope:
+          type: object
+          additionalProperties: true
+        framing:
+          type: object
+          additionalProperties: true
+        fields:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        checks:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    RevisionCreateRequest:
+      type: object
+      required:
+      - revision
+      properties:
+        revision:
+          $ref: '#/components/schemas/RevisionDefinition'
+        changeComment:
+          type: string
+    PagedRevisions:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Revision'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    PagedInterpretations:
+      type: object
+      required:
+      - items
+      - page
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Interpretation'
+        page:
+          $ref: '#/components/schemas/PageInfo'
+    Interpretation:
+      type: object
+      required:
+      - interpretationId
+      - projectId
+      - name
+      properties:
+        interpretationId:
+          type: string
+        projectId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        currentRevisionId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    InterpretationCreateRequest:
+      type: object
+      description: Создание интерпретации одновременно создаёт первую ревизию.
+      required:
+      - name
+      - revision
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        revision:
+          $ref: '#/components/schemas/RevisionDefinition'
+  responses:
+    Conflict:
+      description: Конфликт состояния
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      description: Некорректный запрос
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unavailable:
+      description: Зависимый сервис недоступен
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
