@@ -65,7 +65,17 @@ export function shiftTimestamp(value: string, offsetNanoseconds: string): string
   const date = new Date(Number(seconds * 1000n));
   if (Number.isNaN(date.getTime()))
     throw new Error('Скорректированное время вне календарного диапазона');
-  return date.toISOString().slice(0, 19) + '.' + fraction.toString().padStart(9, '0') + 'Z';
+  const iso = date.toISOString();
+  if (!/^\d{4}-/.test(iso))
+    throw new Error('Скорректированное время вне календарного диапазона 0000–9999');
+  return iso.slice(0, 19) + '.' + fraction.toString().padStart(9, '0') + 'Z';
+}
+export function formatShiftedTimestamp(value: string, offsetNanoseconds: string) {
+  try {
+    return formatTimestamp(shiftTimestamp(value, offsetNanoseconds));
+  } catch {
+    return 'Скорректированное время недоступно: проверьте дату и поправку.';
+  }
 }
 export function timestampNanoseconds(value: string) {
   const match = timestampPattern.exec(timestampSchema.parse(value))!;

@@ -17,6 +17,8 @@ import {
 import { RangePicker } from '../shared/ui/RangePicker';
 import { trackJob, JobCard } from '../features/jobs/Jobs';
 import { UnsavedGuard } from '../shared/lib/use-unsaved';
+import { timeOffsetInput, timeZoneError } from '../shared/model/validation';
+import { TimeZoneSelect } from '../shared/ui/TimeZoneSelect';
 export default function Settings() {
   const project = useProject();
   const projectId = project.projectId;
@@ -52,13 +54,9 @@ export default function Settings() {
   const assembly = useCommand('createAssembly', (input: Record<string, unknown>, options) =>
     api.createAssembly(input, options),
   );
-  const offsetValid = /^-?\d+$/.test(offset);
-  let zoneValid = true;
-  try {
-    new Intl.DateTimeFormat('ru-RU', { timeZone });
-  } catch {
-    zoneValid = false;
-  }
+  const offsetInput = timeOffsetInput(offset);
+  const offsetValid = !offsetInput.error;
+  const zoneValid = !timeZoneError(timeZone);
   return (
     <>
       <UnsavedGuard dirty={dirty} searchKeys={[]} />
@@ -144,7 +142,7 @@ export default function Settings() {
             save.mutate(
               {
                 timeZone,
-                offsetNanoseconds: String(BigInt(offset)),
+                offsetNanoseconds: offsetInput.value!,
                 checksum,
                 overlap: 'preserve-alternatives',
               },
@@ -169,30 +167,30 @@ export default function Settings() {
           }}
         >
           <div className="form-grid">
-            <Field
+            <TimeZoneSelect
               label="Часовой пояс"
-              error={!zoneValid ? 'Неизвестный часовой пояс IANA' : undefined}
-            >
-              {(id) => (
-                <input
-                  id={id}
-                  value={timeZone}
-                  disabled={save.isPending}
-                  onChange={(event) => setTimeZone(event.target.value)}
-                />
-              )}
-            </Field>
+              value={timeZone}
+              onChange={(value) => {
+                setTimeZone(value);
+                save.reset();
+              }}
+              disabled={save.isPending}
+            />
             <Field
               label="Поправка времени, наносекунды"
-              error={!offsetValid ? 'Точное целое число' : undefined}
+              error={offsetInput.error}
+              hint="Целое число наносекунд. Положительное прибавляется, отрицательное вычитается; 1 секунда = 1 000 000 000 нс."
             >
               {(id) => (
                 <input
                   id={id}
                   value={offset}
                   disabled={save.isPending}
-                  onChange={(event) => setOffset(event.target.value)}
-                  inputMode="numeric"
+                  onChange={(event) => {
+                    setOffset(event.target.value);
+                    save.reset();
+                  }}
+                  inputMode="text"
                 />
               )}
             </Field>
@@ -202,7 +200,10 @@ export default function Settings() {
                   id={id}
                   value={checksum}
                   disabled={save.isPending}
-                  onChange={(event) => setChecksum(event.target.value as SettingsModel['checksum'])}
+                  onChange={(event) => {
+                    setChecksum(event.target.value as SettingsModel['checksum']);
+                    save.reset();
+                  }}
                 >
                   <option value="warn">Предупреждать</option>
                   <option value="strict">Строгая проверка</option>

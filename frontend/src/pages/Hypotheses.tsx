@@ -8,6 +8,7 @@ import { MoreChoices, usePagedChoices } from '../shared/api/paged-choices';
 import type { Evidence, Hypothesis } from '../shared/api/contracts/draft';
 import { sourceLink } from '../shared/model/navigation';
 import { UnsavedGuard } from '../shared/lib/use-unsaved';
+import { textError, choiceError } from '../shared/model/validation';
 import {
   Badge,
   Banner,
@@ -35,9 +36,18 @@ export default function Hypotheses() {
   const status = params.get('status') ?? '';
   const type = params.get('type') ?? '';
   const cursor = params.get('cursor') ?? '0';
+  const typeProblem = choiceError(type, ['', 'hypothesis', 'observation'], 'тип записи');
+  const statusProblem = choiceError(status, ['', 'open', 'supported', 'refuted'], 'статус');
+  const filterProblem = typeProblem ?? statusProblem;
   const query = useQuery({
     queryKey: queryKey(projectId, 'hypotheses', { status, type, cursor }),
     queryFn: ({ signal }) => api.hypotheses({ projectId, status, type, cursor }, { signal }),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] &&
+      Reflect.get(previousQuery.queryKey[3] as object, 'cursor') === cursor
+        ? previous
+        : undefined,
+    enabled: !filterProblem,
   });
   const evidence = usePagedChoices(projectId, 'evidence', (cursor, signal) =>
     api.evidence({ projectId, cursor }, { signal }),
@@ -45,6 +55,10 @@ export default function Hypotheses() {
   const [open, setOpen] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [touched, setTouched] = useState({ text: false, basis: false });
+  const [attachedChoices, setAttachedChoices] = useState<Evidence[]>([]);
+  const [evidenceRoles, setEvidenceRoles] = useState<Record<string, Evidence['kind']>>({});
+  const [deleting, setDeleting] = useState<Hypothesis | null>(null);
   const [baseline, setBaseline] = useState(JSON.stringify(emptyDraft));
   const dirty = JSON.stringify(draft) !== baseline;
   const save = useCommand(
@@ -52,20 +66,40 @@ export default function Hypotheses() {
     (input: Draft, options) => api.saveHypothesis({ projectId, ...input }, options),
     [queryKey(projectId, 'hypotheses')],
   );
+  const remove = useCommand(
+    'deleteHypothesis',
+    (hypothesisId: string, options) => api.deleteHypothesis(projectId, hypothesisId, options),
+    [queryKey(projectId, 'hypotheses')],
+  );
+  const textProblem = textError(draft.text, 'формулировку', 4000);
+  const basisProblem = textError(draft.basis, 'основания и открытые вопросы', 8000);
   const availableEvidence = [
     ...new Map(
-      [...(evidence.data?.items ?? []), ...draft.evidence].map((item) => [item.evidenceId, item]),
+      [...(evidence.data?.items ?? []), ...attachedChoices].map((item) => [item.evidenceId, item]),
     ).values(),
   ];
   function edit(value: Draft) {
     setDraft(value);
+    setTouched({ text: false, basis: false });
+    setAttachedChoices(value.evidence);
+    setEvidenceRoles(
+      Object.fromEntries(value.evidence.map((item) => [item.evidenceId, item.kind])),
+    );
     setBaseline(JSON.stringify(value));
     setOpen(true);
     save.reset();
   }
   function close(value: boolean) {
+    if (save.isPending) return;
     if (!value && dirty) setDiscard(true);
     else setOpen(value);
+  }
+  function filter(key: string, value: string) {
+    const next = new URLSearchParams(params);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    if (key !== 'cursor') next.delete('cursor');
+    setParams(next, { replace: true, flushSync: true });
   }
   return (
     <>
@@ -84,27 +118,33 @@ export default function Hypotheses() {
         гипотезы.
       </Banner>
       <div className="form-grid">
-        <Field label="Тип записи">
+        <Field label="Тип записи" error={typeProblem}>
           {(id) => (
-            <select
-              id={id}
-              value={type}
-              onChange={(event) => setParams({ type: event.target.value, status })}
-            >
+            <select id={id} value={type} onChange={(event) => filter('type', event.target.value)}>
               <option value="">Все типы</option>
+              {typeProblem && (
+                <option value={type} disabled>
+                  Недоступный тип: {type}
+                </option>
+              )}
               <option value="hypothesis">Гипотеза</option>
               <option value="observation">Наблюдение</option>
             </select>
           )}
         </Field>
-        <Field label="Статус гипотезы">
+        <Field label="Статус гипотезы" error={statusProblem}>
           {(id) => (
             <select
               id={id}
               value={status}
-              onChange={(event) => setParams({ status: event.target.value, type })}
+              onChange={(event) => filter('status', event.target.value)}
             >
               <option value="">Все статусы</option>
+              {statusProblem && (
+                <option value={status} disabled>
+                  Недоступный статус: {status}
+                </option>
+              )}
               <option value="open">Открыта</option>
               <option value="supported">Поддерживается примерами</option>
               <option value="refuted">Опровергнута</option>
@@ -112,7 +152,14 @@ export default function Hypotheses() {
           )}
         </Field>
       </div>
-      <QueryState pending={query.isPending} error={query.error} retry={() => void query.refetch()}>
+      <div className="query-updating" role="status">
+        {query.isFetching && query.data ? 'Обновление исследовательских записей…' : ''}
+      </div>
+      <QueryState
+        pending={query.isPending && !filterProblem}
+        error={filterProblem ? new Error(filterProblem) : query.error}
+        retry={!filterProblem ? () => void query.refetch() : undefined}
+      >
         {query.data?.items.length ? (
           <div className="hypothesis-list">
             {query.data.items.map((item) => (
@@ -124,7 +171,21 @@ export default function Hypotheses() {
                     </span>
                     <h2>{item.text}</h2>
                   </div>
-                  <Button onClick={() => edit(item)}>Редактировать</Button>
+                  <div className="toolbar">
+                    <Button disabled={query.isFetching} onClick={() => edit(item)}>
+                      Редактировать
+                    </Button>
+                    <Button
+                      variant="danger"
+                      disabled={query.isFetching}
+                      onClick={() => {
+                        remove.reset();
+                        setDeleting(item);
+                      }}
+                    >
+                      Удалить
+                    </Button>
+                  </div>
                 </div>
                 <div className="context-line">
                   <Badge status={item.status} />
@@ -172,9 +233,10 @@ export default function Hypotheses() {
         {query.data && (
           <Pagination
             cursor={cursor}
+            busy={query.isFetching}
             nextCursor={query.data.nextCursor}
             total={query.data.total}
-            onChange={(value) => setParams({ type, status, cursor: value })}
+            onChange={(value) => filter('cursor', value)}
           />
         )}
       </QueryState>
@@ -191,12 +253,16 @@ export default function Hypotheses() {
         <form
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate(draft, {
-              onSuccess: () => {
-                setBaseline(JSON.stringify(draft));
-                setOpen(false);
+            if (textProblem || basisProblem || save.isPending) return;
+            save.mutate(
+              { ...draft, text: draft.text.trim(), basis: draft.basis.trim() },
+              {
+                onSuccess: () => {
+                  setBaseline(JSON.stringify(draft));
+                  setOpen(false);
+                },
               },
-            });
+            );
           }}
         >
           <div className="form-grid">
@@ -230,25 +296,39 @@ export default function Hypotheses() {
               )}
             </Field>
           </div>
-          <Field label="Формулировка">
+          <Field
+            label="Формулировка"
+            hint="Опишите наблюдение или проверяемое предположение, до 4000 символов."
+            error={touched.text ? textProblem : undefined}
+          >
             {(id) => (
               <textarea
                 id={id}
                 required
                 value={draft.text}
                 maxLength={4000}
-                onChange={(event) => setDraft({ ...draft, text: event.target.value })}
+                onChange={(event) => {
+                  setDraft({ ...draft, text: event.target.value });
+                  setTouched({ ...touched, text: true });
+                }}
               />
             )}
           </Field>
-          <Field label="Основания и открытые вопросы">
+          <Field
+            label="Основания и открытые вопросы"
+            hint="Укажите основания и то, что ещё нужно проверить, до 8000 символов."
+            error={touched.basis ? basisProblem : undefined}
+          >
             {(id) => (
               <textarea
                 id={id}
                 required
                 value={draft.basis}
                 maxLength={8000}
-                onChange={(event) => setDraft({ ...draft, basis: event.target.value })}
+                onChange={(event) => {
+                  setDraft({ ...draft, basis: event.target.value });
+                  setTouched({ ...touched, basis: true });
+                }}
               />
             )}
           </Field>
@@ -260,16 +340,21 @@ export default function Hypotheses() {
                   <input
                     type="checkbox"
                     checked={draft.evidence.some((proof) => proof.evidenceId === item.evidenceId)}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      if (!attachedChoices.some((proof) => proof.evidenceId === item.evidenceId))
+                        setAttachedChoices([...attachedChoices, item]);
                       setDraft({
                         ...draft,
                         evidence: event.target.checked
-                          ? [...draft.evidence, item]
+                          ? [
+                              ...draft.evidence,
+                              { ...item, kind: evidenceRoles[item.evidenceId] ?? item.kind },
+                            ]
                           : draft.evidence.filter((proof) => proof.evidenceId !== item.evidenceId),
-                      })
-                    }
+                      });
+                    }}
                   />
-                  {item.basis}
+                  {item.basis || 'Связь ' + item.evidenceId + ' · основание не указано'}
                 </label>
                 {draft.evidence.some((proof) => proof.evidenceId === item.evidenceId) && (
                   <Field label={'Роль примера ' + item.evidenceId}>
@@ -279,7 +364,11 @@ export default function Hypotheses() {
                         value={
                           draft.evidence.find((proof) => proof.evidenceId === item.evidenceId)!.kind
                         }
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          setEvidenceRoles({
+                            ...evidenceRoles,
+                            [item.evidenceId]: event.target.value as Evidence['kind'],
+                          });
                           setDraft({
                             ...draft,
                             evidence: draft.evidence.map((proof) =>
@@ -287,8 +376,8 @@ export default function Hypotheses() {
                                 ? { ...proof, kind: event.target.value as Evidence['kind'] }
                                 : proof,
                             ),
-                          })
-                        }
+                          });
+                        }}
                       >
                         <option value="support">Поддерживающий пример</option>
                         <option value="counterexample">Контрпример</option>
@@ -304,10 +393,40 @@ export default function Hypotheses() {
             )}
           </fieldset>
           {save.error && <ErrorState error={save.error} />}
-          <Button type="submit" variant="primary" disabled={save.isPending}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={!!textProblem || !!basisProblem || save.isPending}
+          >
             Сохранить исследовательскую запись
           </Button>
         </form>
+      </Modal>
+      <Modal
+        title="Удалить исследовательскую запись?"
+        description="Формулировка и список прикреплённых примеров будут удалены. Сохранённые связи, исходные пакеты и результаты запусков останутся доступны."
+        open={!!deleting}
+        onOpenChange={(open) => {
+          if (!open && !remove.isPending) setDeleting(null);
+        }}
+      >
+        {deleting && <p>{deleting.text}</p>}
+        {remove.error && <ErrorState error={remove.error} />}
+        <div className="toolbar">
+          <Button disabled={remove.isPending} onClick={() => setDeleting(null)}>
+            Оставить запись
+          </Button>
+          <Button
+            variant="danger"
+            disabled={remove.isPending}
+            onClick={() =>
+              deleting &&
+              remove.mutate(deleting.hypothesisId, { onSuccess: () => setDeleting(null) })
+            }
+          >
+            {remove.isPending ? 'Удаление…' : 'Удалить запись'}
+          </Button>
+        </div>
       </Modal>
       <Modal
         title="Закрыть без сохранения?"

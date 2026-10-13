@@ -12,6 +12,8 @@ import { queryKey, useCommand } from '../shared/api/query';
 import type { Interpretation, Location, Revision } from '../shared/api/contracts/draft';
 import { readLocation, sourceLink } from '../shared/model/navigation';
 import { editJsonValue, formatJsonText } from '../shared/model/json-text';
+import { integerInput } from '../shared/model/validation';
+import { schemaProblems } from '../shared/model/schema-validation';
 import { UnsavedGuard } from '../shared/lib/use-unsaved';
 import {
   Banner,
@@ -168,6 +170,8 @@ function EditorWorkspace({
     if (value && !Array.isArray(value) && typeof value === 'object')
       parsed = value as Record<string, unknown>;
   }
+  const problems = error ? {} : schemaProblems(parsed);
+  const hasProblems = Object.keys(problems).length > 0;
   function updateBasic(key: string, value: unknown) {
     if (parsed) setDraft(editJsonValue(draft, [key], value));
   }
@@ -180,6 +184,10 @@ function EditorWorkspace({
       ? (parsed.rules[0] as Record<string, unknown>)
       : null;
   const basic = parsed?.format === 'madrigal-demo-v1';
+  const scopeDirection =
+    parsed?.scope && typeof parsed.scope === 'object' && 'direction' in parsed.scope
+      ? String(parsed.scope.direction)
+      : '';
   const fixed =
     basic &&
     parsed?.framing &&
@@ -188,16 +196,21 @@ function EditorWorkspace({
     parsed.framing.kind === 'fixed';
   function updateFirst(key: 'fields' | 'rules', change: Record<string, unknown>) {
     const list = parsed?.[key];
-    if (Array.isArray(list))
-      setDraft(
-        Object.entries(change).reduce(
-          (text, [name, value]) => editJsonValue(text, [key, 0, name], value),
-          draft,
-        ),
+    if (Array.isArray(list)) {
+      let next = Object.entries(change).reduce(
+        (text, [name, value]) => editJsonValue(text, [key, 0, name], value),
+        draft,
       );
+      if (key === 'fields' && typeof change.name === 'string' && Array.isArray(parsed?.rules))
+        parsed.rules.forEach((value, index) => {
+          if (value && typeof value === 'object' && 'field' in value && value.field === field?.name)
+            next = editJsonValue(next, ['rules', index, 'field'], change.name);
+        });
+      setDraft(next);
+    }
   }
   function saveNow(withPreview: boolean) {
-    if (save.isPending || error) return;
+    if (save.isPending || error || hasProblems) return;
     const generation = previewGeneration.current;
     setPreviewNotice('');
     setPreviewAfterSave(withPreview);
@@ -229,7 +242,7 @@ function EditorWorkspace({
         actions={
           <Button
             variant="primary"
-            disabled={save.isPending || !!error || !dirty}
+            disabled={save.isPending || !!error || hasProblems || !dirty}
             onClick={() => saveNow(false)}
           >
             {save.isPending ? 'Сохранение…' : 'Сохранить новую ревизию'}
@@ -280,6 +293,17 @@ function EditorWorkspace({
             />
           </div>
           {error && <Banner tone="error">Синтаксическая ошибка JSON: {error}</Banner>}
+          {hasProblems && (
+            <Banner tone="error">
+              <ul>
+                {Object.entries(problems).map(([path, message]) => (
+                  <li key={path}>
+                    <code>{path}</code>: {message}
+                  </li>
+                ))}
+              </ul>
+            </Banner>
+          )}
           {save.error && <ErrorState error={save.error} />}
         </section>
         <aside className="panel editor-basics">
@@ -289,7 +313,7 @@ function EditorWorkspace({
           <Banner>
             Формы относятся к временному frontend-формату. Поддержка AN-03 ожидает согласования.
           </Banner>
-          <Field label="Порядок байтов">
+          <Field label="Порядок байтов" error={problems.endian}>
             {(id) => (
               <select
                 id={id}
@@ -297,18 +321,25 @@ function EditorWorkspace({
                 value={typeof parsed?.endian === 'string' ? parsed.endian : ''}
                 onChange={(event) => updateBasic('endian', event.target.value)}
               >
+                {parsed?.endian !== 'little' && parsed?.endian !== 'big' && (
+                  <option value={String(parsed?.endian ?? '')} disabled>
+                    Выберите порядок байтов
+                  </option>
+                )}
                 <option value="little">Little endian</option>
                 <option value="big">Big endian</option>
               </select>
             )}
           </Field>
-          <Field label="Размер сообщения, байт">
+          <Field
+            label="Размер сообщения, байт"
+            hint="Целое число от 1 до 4096; поле uint32 должно помещаться в сообщение."
+            error={problems['framing.length']}
+          >
             {(id) => (
               <input
                 id={id}
-                type="number"
-                min={1}
-                max={4096}
+                inputMode="numeric"
                 disabled={!fixed}
                 value={
                   parsed?.framing &&
@@ -317,37 +348,53 @@ function EditorWorkspace({
                     ? String(parsed.framing.length)
                     : ''
                 }
-                onChange={(event) =>
-                  setDraft(editJsonValue(draft, ['framing', 'length'], event.target.valueAsNumber))
-                }
+                onChange={(event) => {
+                  const length = integerInput(event.target.value, {
+                    positive: true,
+                    maximum: 4096n,
+                  });
+                  setDraft(
+                    editJsonValue(
+                      draft,
+                      ['framing', 'length'],
+                      length.value !== undefined ? Number(length.value) : event.target.value,
+                    ),
+                  );
+                }}
               />
             )}
           </Field>
-          <Field label="Область действия">
+          <Field label="Область действия" error={problems['scope.direction']}>
             {(id) => (
               <select
                 id={id}
                 disabled={!parsed}
-                value={
-                  parsed?.scope && typeof parsed.scope === 'object' && 'direction' in parsed.scope
-                    ? String(parsed.scope.direction)
-                    : ''
-                }
+                value={scopeDirection}
                 onChange={(event) =>
                   setDraft(editJsonValue(draft, ['scope', 'direction'], event.target.value))
                 }
               >
+                {!['A_TO_B', 'B_TO_A'].includes(scopeDirection) && (
+                  <option value={scopeDirection} disabled>
+                    Выберите направление
+                  </option>
+                )}
                 <option value="A_TO_B">A → B</option>
                 <option value="B_TO_A">B → A</option>
               </select>
             )}
           </Field>
-          <Field label="Имя первого поля">
+          <Field
+            label="Имя первого поля"
+            hint="Непустое уникальное имя, до 120 символов. Связанные правила используют то же имя."
+            error={problems['fields.0.name']}
+          >
             {(id) => (
               <input
                 id={id}
                 disabled={!basic || !field}
                 value={String(field?.name ?? '')}
+                maxLength={120}
                 onChange={(event) => updateFirst('fields', { name: event.target.value })}
               />
             )}
@@ -355,7 +402,11 @@ function EditorWorkspace({
           <Field label="Тип поля">
             {(id) => <input id={id} readOnly value={String(field?.type ?? 'Не предоставлен')} />}
           </Field>
-          <Field label="Смещение поля в сообщении">
+          <Field
+            label="Смещение поля в сообщении"
+            hint="Целое смещение от начала сообщения, начиная с 0; uint32 занимает 4 байта."
+            error={problems['fields.0.offset']}
+          >
             {(id) => (
               <input
                 id={id}
@@ -366,7 +417,11 @@ function EditorWorkspace({
               />
             )}
           </Field>
-          <Field label="Максимум первого правила">
+          <Field
+            label="Максимум первого правила"
+            hint="Целое значение от 0 до 4 294 967 295 для поля uint32."
+            error={problems['rules.0.maximum']}
+          >
             {(id) => (
               <input
                 id={id}
@@ -417,6 +472,7 @@ function EditorWorkspace({
           <RangePicker
             projectId={projectId}
             label="Диапазон preview"
+            maximumLength={config.previewLimit}
             initial={location}
             onChange={(value) => {
               previewGeneration.current++;
@@ -428,7 +484,7 @@ function EditorWorkspace({
         <div className="toolbar">
           <Button
             variant="primary"
-            disabled={!canPreview || !!error || preview.isPending || save.isPending}
+            disabled={!canPreview || !!error || hasProblems || preview.isPending || save.isPending}
             onClick={() =>
               dirty || !savedRevision
                 ? saveNow(true)

@@ -91,12 +91,15 @@ export type RequestOptions = {
   timeoutMs?: number;
   file?: File;
 };
+let mockGeneration = 0;
+let mockRecovery: Promise<void> | undefined;
 export async function request<T>(
   operation: Operation,
   params: Record<string, unknown>,
   schema: z.ZodType<T>,
   options: RequestOptions = {},
 ): Promise<T> {
+  const requestMockGeneration = mockGeneration;
   const mapping = config.mode === 'mock' ? draftMapping(operation) : gatewayMapping[operation];
   if (!mapping)
     throw new ApiError(
@@ -143,16 +146,44 @@ export async function request<T>(
   const timeout = AbortSignal.timeout(options.timeoutMs ?? 15000);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   try {
-    return await decodeResponse(
-      await fetch(url, {
+    const execute = () =>
+      fetch(url, {
         method: mapping.method,
         headers,
         body,
         signal,
         credentials: 'same-origin',
-      }),
-      schema,
-    );
+      });
+    try {
+      return await decodeResponse(await execute(), schema);
+    } catch (error) {
+      // A stopped development worker used to expose Vite's HTML fallback as API data.
+      // Restore interception once for reads. Mutations never repeat automatically.
+      if (
+        (import.meta.env.DEV || import.meta.env.MODE === 'mock') &&
+        config.mode === 'mock' &&
+        mapping.method === 'GET' &&
+        'serviceWorker' in navigator &&
+        !signal.aborted &&
+        error instanceof ApiError &&
+        (error.code === 'MOCK_INACTIVE' ||
+          (error.code === 'UNEXPECTED_CONTENT' && error.httpStatus === 200))
+      ) {
+        if (mockGeneration === requestMockGeneration) {
+          mockRecovery ??= import('../../mocks/browser')
+            .then(({ restartMocks }) => restartMocks())
+            .then(() => {
+              mockGeneration++;
+            })
+            .finally(() => {
+              mockRecovery = undefined;
+            });
+          await mockRecovery;
+        }
+        return await decodeResponse(await execute(), schema);
+      }
+      throw error;
+    }
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (options.signal?.aborted) throw new ApiError('ABORTED', 'Чтение отменено.');

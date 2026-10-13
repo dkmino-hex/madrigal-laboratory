@@ -10,6 +10,8 @@ import {
   shiftTimestamp,
 } from '../shared/model/precision';
 import { cellAt, validateSearch } from '../shared/model/bytes';
+import { textError, timeOffsetInput, timeZoneError } from '../shared/model/validation';
+import { schemaProblems } from '../shared/model/schema-validation';
 import { addJob, loadState, nextId, saveState, settleJob, type DemoState } from './state';
 import {
   assembliesFor,
@@ -214,6 +216,13 @@ export function validateDraft(json: string) {
       'Схема не поддерживается демонстрационным форматом',
       parsed.error.issues.map(({ path, message }) => ({ path: path.join('.'), message })),
     );
+  const problems = schemaProblems(value);
+  if (Object.keys(problems).length)
+    throw new MockError(
+      'SCHEMA_VALIDATION',
+      'Исправьте значения полей схемы.',
+      Object.entries(problems).map(([path, message]) => ({ path, message })),
+    );
   return parsed.data;
 }
 function revision(state: DemoState, project: string, interpretationId: string, revisionId: string) {
@@ -378,8 +387,10 @@ export async function dispatch(
       break;
     case 'createProject': {
       const name = text(params, 'name').trim();
-      if (!name || name.length > 120)
-        throw new MockError('VALIDATION', 'Название: от 1 до 120 символов');
+      const problem =
+        textError(name, 'название проекта', 120) ??
+        textError(text(params, 'description'), 'описание', 2000, false);
+      if (problem) throw new MockError('VALIDATION', problem);
       const project: dto.Project = {
         projectId: nextId(state, 'project'),
         name,
@@ -483,7 +494,8 @@ export async function dispatch(
           sessions.filter(
             (item) =>
               (item.sideA + item.sideB).toLowerCase().includes(query) &&
-              (!onlyDefects || item.defects.length),
+              (!onlyDefects ||
+                item.defects.some((defect) => defect !== 'Ретрансляция сохранена как источник')),
           ),
           params,
         );
@@ -571,8 +583,12 @@ export async function dispatch(
       break;
     case 'saveSettings': {
       requireProject(state, projectId, true);
+      const offset = timeOffsetInput(text(params, 'offsetNanoseconds'));
+      const problem = timeZoneError(text(params, 'timeZone')) ?? offset.error;
+      if (problem) throw new MockError('VALIDATION', problem);
       const settings = dto.settingsSchema.parse({
         ...params,
+        offsetNanoseconds: offset.value,
         settingsVersion: nextId(state, 'settings'),
       });
       (state.settings[projectId] ??= []).push(settings);
@@ -610,6 +626,10 @@ export async function dispatch(
     }
     case 'importActions': {
       requireProject(state, projectId, true);
+      const timeZone = text(params, 'timeZone', 'UTC');
+      const offset = timeOffsetInput(text(params, 'offsetNanoseconds', '0'));
+      const timeProblem = timeZoneError(timeZone) ?? offset.error;
+      if (timeProblem) throw new MockError('VALIDATION', timeProblem);
       if (!file || file.size > 65536)
         throw new MockError(
           'DEMO_LIMITATION',
@@ -628,22 +648,35 @@ export async function dispatch(
       rows.forEach((row, index) => {
         if (!row.trim()) return;
         const [timestamp, name, type, ...parameters] = row.split(',');
-        if (!dto.actionSchema.shape.timestamp.safeParse(timestamp).success || !name || !type) {
+        if (
+          !dto.actionSchema.shape.timestamp.safeParse(timestamp).success ||
+          textError(name ?? '', 'название действия', 120) ||
+          textError(type ?? '', 'тип действия', 120)
+        ) {
           errors.push({
             row: index + 2,
             reason: 'Нужно точное ISO-время с timezone, название и тип',
           });
           return;
         }
+        try {
+          shiftTimestamp(timestamp!, offset.value!);
+        } catch {
+          errors.push({
+            row: index + 2,
+            reason: 'Поправка выводит время действия за поддерживаемый календарный диапазон.',
+          });
+          return;
+        }
         state.actions.push({
           actionId: nextId(state, 'action'),
           projectId,
-          name,
-          type,
+          name: name!.trim(),
+          type: type!.trim(),
           parameters: parameters.join(','),
           timestamp: timestamp!,
-          timeZone: text(params, 'timeZone', 'UTC'),
-          offsetNanoseconds: text(params, 'offsetNanoseconds', '0'),
+          timeZone,
+          offsetNanoseconds: offset.value!,
           sourceFile: file.name,
           row: index + 2,
           importId,
@@ -694,6 +727,8 @@ export async function dispatch(
         );
       if (loc.projectId !== projectId)
         throw new MockError('CROSS_PROJECT', 'Нельзя связать источники другого проекта');
+      if (loc.length === '0')
+        throw new MockError('VALIDATION', 'Выберите диапазон длиной больше нуля.');
       const actionId = text(params, 'actionId');
       if (
         !existing &&
@@ -710,7 +745,9 @@ export async function dispatch(
         revisionId: existing?.revisionId ?? params.revisionId,
         runId: existing?.runId ?? params.runId,
       });
-      if (!evidence.basis.trim()) throw new MockError('VALIDATION', 'Укажите основание связи');
+      const problem = textError(evidence.basis, 'основание связи', 4000, false);
+      if (problem) throw new MockError('VALIDATION', problem);
+      evidence.basis = evidence.basis.trim();
       if (existing) state.evidence[state.evidence.indexOf(existing)] = evidence;
       else state.evidence.push(evidence);
       result = evidence;
@@ -734,16 +771,33 @@ export async function dispatch(
         hypothesisId,
         evidence: params.evidence ?? [],
       });
-      if (!hypothesis.text.trim() || !hypothesis.basis.trim())
-        throw new MockError('VALIDATION', 'Формулировка и основание обязательны');
+      const problem =
+        textError(hypothesis.text, 'формулировку', 4000) ??
+        textError(hypothesis.basis, 'основания и открытые вопросы', 8000);
+      if (problem) throw new MockError('VALIDATION', problem);
+      hypothesis.text = hypothesis.text.trim();
+      hypothesis.basis = hypothesis.basis.trim();
       if (hypothesis.evidence.some((item) => item.location.projectId !== projectId))
         throw new MockError('CROSS_PROJECT', 'Источник другого проекта');
       const existing = state.hypotheses.findIndex(
         (item) => item.hypothesisId === hypothesisId && item.projectId === projectId,
       );
+      if (params.hypothesisId && existing < 0)
+        throw new MockError('NOT_FOUND', 'Исследовательская запись недоступна', undefined, 404);
       if (existing >= 0) state.hypotheses[existing] = hypothesis;
       else state.hypotheses.push(hypothesis);
       result = hypothesis;
+      break;
+    }
+    case 'deleteHypothesis': {
+      const hypothesisId = text(params, 'hypothesisId');
+      const existing = state.hypotheses.findIndex(
+        (item) => item.projectId === projectId && item.hypothesisId === hypothesisId,
+      );
+      if (existing < 0)
+        throw new MockError('NOT_FOUND', 'Исследовательская запись недоступна', undefined, 404);
+      state.hypotheses.splice(existing, 1);
+      result = { projectId, hypothesisId, deleted: true };
       break;
     }
     case 'interpretations':
@@ -760,10 +814,12 @@ export async function dispatch(
       break;
     case 'createInterpretation': {
       requireProject(state, projectId, true);
+      const problem = textError(text(params, 'name'), 'название интерпретации', 120);
+      if (problem) throw new MockError('VALIDATION', problem);
       const interpretation = {
         projectId,
         interpretationId: nextId(state, 'interpretation'),
-        name: text(params, 'name'),
+        name: text(params, 'name').trim(),
         revisions: [],
       };
       state.interpretations.push(interpretation);

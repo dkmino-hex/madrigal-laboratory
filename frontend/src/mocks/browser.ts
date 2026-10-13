@@ -13,3 +13,7 @@ export async function startMocks() {
     },
   });
 }
+export async function restartMocks() {
+  worker.stop();
+  await startMocks();
+}

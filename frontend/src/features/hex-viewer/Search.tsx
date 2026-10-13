@@ -30,14 +30,25 @@ export function SearchPanel({
             <select
               id={id}
               value={mode}
-              onChange={(event) => setMode(event.target.value as 'HEX' | 'ASCII')}
+              onChange={(event) => {
+                setMode(event.target.value as 'HEX' | 'ASCII');
+                setSubmitted(undefined);
+              }}
             >
               <option>HEX</option>
               <option>ASCII</option>
             </select>
           )}
         </Field>
-        <Field label="Образец" error={error ?? undefined}>
+        <Field
+          label="Образец"
+          error={error ?? undefined}
+          hint={
+            mode === 'HEX'
+              ? 'Пары шестнадцатеричных цифр, например 15 00 00 00; до 256 байтов.'
+              : 'Печатные символы ASCII, до 256 символов.'
+          }
+        >
           {(id, info) => (
             <input
               id={id}
@@ -45,7 +56,10 @@ export function SearchPanel({
               aria-invalid={!!error}
               value={pattern}
               spellCheck={false}
-              onChange={(event) => setPattern(event.target.value)}
+              onChange={(event) => {
+                setPattern(event.target.value);
+                setSubmitted(undefined);
+              }}
             />
           )}
         </Field>

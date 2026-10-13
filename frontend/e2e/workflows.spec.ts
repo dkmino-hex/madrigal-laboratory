@@ -192,7 +192,7 @@ test('AT-11/12 CSV с ошибкой строки, timezone, поправка и
       'timestamp,name,type,parameters\n2026-10-11T15:34:56.123456789+03:00,Установить 21,setpoint,21\nbad,Неверная строка,setpoint,?\n',
     ),
   });
-  await dialog.getByLabel('Часовой пояс журнала').fill('Europe/Moscow');
+  await dialog.getByLabel('Часовой пояс журнала').selectOption('Europe/Moscow');
   await dialog.getByLabel('Поправка времени, наносекунды').fill('-1');
   await dialog.getByRole('button', { name: 'Импортировать журнал' }).click();
   await expect(dialog.getByText(/Частичный импорт/)).toBeVisible();
@@ -244,9 +244,12 @@ test('AT-14/15 редактор защищает черновик, сохран�
   await expect(page.getByRole('dialog', { name: 'Есть несохранённые изменения' })).toBeVisible();
   await page.getByRole('button', { name: 'Остаться', exact: true }).click();
   await editJson(page, schemaText.replace('"length": 4', '"length": 0'));
-  await page.getByRole('button', { name: 'Сохранить новую ревизию', exact: true }).click();
-  await page.getByText('Техническая диагностика').click();
-  await expect(page.getByText(/framing.length/)).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Сохранить новую ревизию', exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByLabel('Размер сообщения, байт')).toHaveAccessibleDescription(
+    /больше нуля/,
+  );
   await editJson(page, schemaText.replace('"30"', '"60"'));
   await page.getByRole('button', { name: 'Сохранить новую ревизию и выполнить preview' }).click();
   await expect(

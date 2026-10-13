@@ -226,31 +226,38 @@ export function Field({
 export function CopyButton({
   value,
   label = 'Копировать',
+  description,
   disabled,
 }: {
   value: string;
   label?: string;
+  description?: string;
   disabled?: boolean;
 }) {
-  const [state, setState] = useState('');
+  const [state, setState] = useState({ value: '', message: '' });
   return (
     <span className="copy-control">
       <Button
         aria-label={label}
-        title={label}
+        title={description ?? label}
         variant="ghost"
         disabled={disabled}
-        onClick={() =>
-          void navigator.clipboard.writeText(value).then(
-            () => setState('Скопировано'),
-            () => setState('Буфер обмена недоступен'),
-          )
-        }
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setState({ value, message: 'Скопировано' });
+          } catch {
+            setState({ value, message: 'Буфер обмена недоступен' });
+          }
+        }}
       >
         <Copy size={14} aria-hidden="true" />
       </Button>
-      <span className="sr-only" aria-live="polite">
-        {state}
+      <span
+        className={state.value === value && state.message ? 'copy-feedback' : 'sr-only'}
+        aria-live="polite"
+      >
+        {state.value === value ? state.message : ''}
       </span>
     </span>
   );
@@ -279,26 +286,52 @@ export function Pagination({
   nextCursor,
   onChange,
   total,
+  busy = false,
 }: {
   cursor: string;
   nextCursor: string | null;
   onChange: (cursor: string) => void;
   total?: string;
+  busy?: boolean;
 }) {
   return (
-    <div className="pagination">
+    <div className="pagination" aria-busy={busy}>
       <small className="muted">
         {total !== undefined ? 'Всего записей: ' + total : 'Общее количество не предоставлено'}
       </small>
-      <div className="toolbar">
-        <Button disabled={cursor === '0'} onClick={() => onChange('0')}>
-          В начало
-        </Button>
-        <span className="mono">cursor {cursor}</span>
-        <Button disabled={nextCursor === null} onClick={() => nextCursor && onChange(nextCursor)}>
-          Следующая страница
-        </Button>
-      </div>
+      {cursor !== '0' || nextCursor !== null ? (
+        <div className="toolbar">
+          <Button
+            disabled={busy || cursor === '0'}
+            title={
+              busy
+                ? 'Список обновляется'
+                : cursor === '0'
+                  ? 'Вы уже на первой странице'
+                  : 'Открыть первую страницу'
+            }
+            onClick={() => onChange('0')}
+          >
+            В начало
+          </Button>
+          <span className="muted">{cursor === '0' ? 'Первая страница' : 'Продолжение списка'}</span>
+          <Button
+            disabled={busy || nextCursor === null}
+            title={
+              busy
+                ? 'Список обновляется'
+                : nextCursor === null
+                  ? 'Больше записей нет'
+                  : 'Открыть следующую страницу'
+            }
+            onClick={() => nextCursor && onChange(nextCursor)}
+          >
+            Следующая страница
+          </Button>
+        </div>
+      ) : (
+        <small className="muted">Все записи показаны</small>
+      )}
     </div>
   );
 }

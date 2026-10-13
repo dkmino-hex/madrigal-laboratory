@@ -3,7 +3,7 @@ import base from './playwright.config';
 
 export default defineConfig({
   ...base,
-  testMatch: /(?:audit|completion|pagination)\.spec\.ts/,
+  testMatch: /(?:audit|completion|pagination|review)\.spec\.ts/,
   outputDir: 'test-results/browsers',
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report-browsers' }]],
   projects: [

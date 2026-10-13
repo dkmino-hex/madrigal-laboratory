@@ -168,7 +168,7 @@ test('Аудит: повтор CSV сохраняет ключ, изменени
   await expect(submit).toBeEnabled();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
   expect(keys[1]).toBe(keys[0]);
-  await dialog.getByLabel('Часовой пояс журнала').fill('Europe/Moscow');
+  await dialog.getByLabel('Часовой пояс журнала').selectOption('Europe/Moscow');
   await submit.click();
   await expect.poll(() => keys.length).toBe(3);
   await expect(submit).toBeEnabled();

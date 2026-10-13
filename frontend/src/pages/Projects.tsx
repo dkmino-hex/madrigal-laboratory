@@ -17,17 +17,28 @@ import {
   QueryState,
 } from '../shared/ui/common';
 import { UploadWidget } from '../features/projects/Upload';
+import { textError } from '../shared/model/validation';
+import { useBufferedParam } from '../shared/lib/use-buffered-param';
 export default function Projects() {
   const [params, setParams] = useSearchParams();
   const cursor = params.get('cursor') ?? '0';
   const q = params.get('q') ?? '';
+  const search = useBufferedParam('q');
   const query = useQuery({
     queryKey: queryKey('all', 'projects', { cursor, q }),
     queryFn: ({ signal }) => api.projects({ cursor, q }, { signal }),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] &&
+      Reflect.get(previousQuery.queryKey[3] as object, 'cursor') === cursor
+        ? previous
+        : undefined,
   });
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
   const [description, setDescription] = useState('');
+  const nameProblem = textError(name, 'название проекта', 120);
+  const descriptionProblem = textError(description, 'описание', 2000, false);
   const navigate = useNavigate();
   const create = useCommand('createProject', api.createProject, [queryKey('all', 'projects')]);
   return (
@@ -66,8 +77,9 @@ export default function Projects() {
                 <form
                   onSubmit={(event) => {
                     event.preventDefault();
+                    if (nameProblem || descriptionProblem || create.isPending) return;
                     create.mutate(
-                      { name, description },
+                      { name: name.trim(), description: description.trim() },
                       {
                         onSuccess: (project) => {
                           setOpen(false);
@@ -77,7 +89,11 @@ export default function Projects() {
                     );
                   }}
                 >
-                  <Field label="Название проекта">
+                  <Field
+                    label="Название проекта"
+                    error={nameTouched ? nameProblem : undefined}
+                    hint="От 1 до 120 символов. Название из одних пробелов не принимается."
+                  >
                     {(id) => (
                       <input
                         id={id}
@@ -86,11 +102,18 @@ export default function Projects() {
                         required
                         maxLength={120}
                         value={name}
-                        onChange={(event) => setName(event.target.value)}
+                        onChange={(event) => {
+                          setName(event.target.value);
+                          setNameTouched(true);
+                        }}
                       />
                     )}
                   </Field>
-                  <Field label="Описание исследования">
+                  <Field
+                    label="Описание исследования"
+                    error={descriptionProblem}
+                    hint="Необязательно, до 2000 символов."
+                  >
                     {(id) => (
                       <textarea
                         id={id}
@@ -101,7 +124,11 @@ export default function Projects() {
                     )}
                   </Field>
                   {create.error && <ErrorState error={create.error} />}
-                  <Button type="submit" variant="primary" disabled={create.isPending}>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    disabled={!!nameProblem || !!descriptionProblem || create.isPending}
+                  >
                     {create.isPending ? 'Создание…' : 'Создать проект'}
                   </Button>
                 </form>
@@ -116,18 +143,16 @@ export default function Projects() {
             <input
               id={id}
               type="search"
-              value={q}
+              value={search.value}
               placeholder="Название проекта…"
-              onChange={(event) => {
-                const next = new URLSearchParams(params);
-                next.set('q', event.target.value);
-                next.delete('cursor');
-                setParams(next, { replace: true });
-              }}
+              onChange={(event) => search.setValue(event.target.value)}
             />
           )}
         </Field>
         <span className="muted">Локальные записи · неизменяемые версии</span>
+      </div>
+      <div className="query-updating" role="status">
+        {search.pending || query.isFetching ? 'Поиск проектов…' : ''}
       </div>
       <QueryState pending={query.isPending} error={query.error} retry={() => void query.refetch()}>
         {query.data?.items.length ? (
@@ -166,6 +191,7 @@ export default function Projects() {
             cursor={cursor}
             nextCursor={query.data.nextCursor}
             total={query.data.total}
+            busy={query.isFetching || search.pending}
             onChange={(value) => {
               const next = new URLSearchParams(params);
               next.set('cursor', value);

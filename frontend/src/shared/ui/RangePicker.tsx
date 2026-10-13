@@ -4,17 +4,20 @@ import { api } from '../api/client';
 import { queryKey } from '../api/query';
 import { MoreChoices, usePagedChoices } from '../api/paged-choices';
 import type { Location } from '../api/contracts/draft';
-import { decimalSchema, decimal } from '../model/precision';
+import { decimal } from '../model/precision';
+import { rangeInput } from '../model/validation';
 import { Field, ErrorState, Pagination } from './common';
 export function RangePicker({
   projectId,
   label,
   initial,
+  maximumLength,
   onChange,
 }: {
   projectId: string;
   label: string;
   initial?: Location | null;
+  maximumLength?: number;
   onChange: (location: Location | null, settingsVersion?: string) => void;
 }) {
   const [captureChoice, setCapture] = useState(initial?.captureId ?? '');
@@ -34,6 +37,7 @@ export function RangePicker({
     {},
     true,
     captureChoice,
+    (capture) => capture.status === 'READY',
   );
   const captureId =
     captureChoice ||
@@ -54,6 +58,7 @@ export function RangePicker({
     { captureId, sessionId },
     !!sessionId,
     assemblyChoice,
+    (assembly) => assembly.status === 'READY',
   );
   const assemblyId =
     assemblyChoice ||
@@ -62,12 +67,16 @@ export function RangePicker({
   const assembly = assemblies.data?.items.find(
     (assembly) => assembly.assemblyId === assemblyId && assembly.status === 'READY',
   );
-  const valid =
-    selectedCapture?.status === 'READY' &&
-    assembly &&
-    decimalSchema.safeParse(start).success &&
-    decimalSchema.safeParse(length).success &&
-    BigInt(start) + BigInt(length) <= BigInt(assembly.length);
+  const range = rangeInput(start, length, assembly?.length);
+  if (
+    range.length !== undefined &&
+    maximumLength !== undefined &&
+    BigInt(range.length) > BigInt(maximumLength)
+  ) {
+    range.lengthError = 'Для этого разбора выберите не больше ' + maximumLength + ' байт.';
+    range.valid = false;
+  }
+  const valid = selectedCapture?.status === 'READY' && assembly && range.valid;
   const serialized = valid
     ? JSON.stringify({
         projectId,
@@ -76,8 +85,8 @@ export function RangePicker({
         assemblyId,
         streamId: assembly.streamId,
         direction: assembly.direction,
-        start: decimal(start),
-        length: decimal(length),
+        start: decimal(range.start!),
+        length: decimal(range.length!),
       })
     : 'null';
   useEffect(() => {
@@ -102,7 +111,11 @@ export function RangePicker({
                 setSessionCursor('0');
               }}
             >
-              <option value="">Выберите запись</option>
+              {!captureId && (
+                <option value="" disabled>
+                  {captures.isPending ? 'Загрузка записей…' : 'Нет готовых записей'}
+                </option>
+              )}
               {captureId && !captures.data?.items.some((item) => item.captureId === captureId) && (
                 <option value={captureId}>{captureId} · выбранная запись</option>
               )}
@@ -139,7 +152,10 @@ export function RangePicker({
             </select>
           )}
         </Field>
-        <Field label={label + ': сборка и направление'}>
+        <Field
+          label={label + ': сборка и направление'}
+          hint="Сборки в процессе подготовки и с ошибкой недоступны для исследования."
+        >
           {(id) => (
             <select
               id={id}
@@ -157,7 +173,12 @@ export function RangePicker({
                   disabled={item.status !== 'READY'}
                 >
                   {item.assemblyId} · {item.direction === 'A_TO_B' ? 'A→B' : 'B→A'} ·{' '}
-                  {item.settingsVersion}
+                  {item.settingsVersion} ·{' '}
+                  {item.status === 'READY'
+                    ? 'Готова'
+                    : item.status === 'BUILDING'
+                      ? 'Ещё собирается'
+                      : 'Ошибка сборки'}
                 </option>
               ))}
             </select>
@@ -166,9 +187,8 @@ export function RangePicker({
         <div className="form-grid">
           <Field
             label={label + ': начало'}
-            error={
-              !decimalSchema.safeParse(start).success ? 'Целое неотрицательное число' : undefined
-            }
+            hint="Смещение в байтах, начиная с 0."
+            error={range.startError}
           >
             {(id) => (
               <input
@@ -181,9 +201,8 @@ export function RangePicker({
           </Field>
           <Field
             label={label + ': длина'}
-            error={
-              !decimalSchema.safeParse(length).success ? 'Целое неотрицательное число' : undefined
-            }
+            hint="Число байтов в диапазоне, больше 0."
+            error={range.lengthError}
           >
             {(id) => (
               <input
@@ -223,9 +242,6 @@ export function RangePicker({
             total={sessions.data.total}
           />
         </div>
-      )}
-      {assembly && !valid && (
-        <p className="field-error">Диапазон выходит за пределы сборки или имеет неверный формат.</p>
       )}
       {assemblies.data &&
         assemblyId &&

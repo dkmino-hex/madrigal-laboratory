@@ -44,7 +44,7 @@ export default function Runs() {
   const [settingsChoice, setSettings] = useState(
     params.get('settingsVersion') ?? project.settingsVersion,
   );
-  const [filters, setFilters] = useState('Все сообщения выбранных сборок');
+  const filters = 'Все сообщения выбранных сборок';
   const [location, setLocation] = useState<Location | null>(null);
   const [corpus, setCorpus] = useState<(Location & { settingsVersion: string })[]>([]);
   const [assemblySettings, setAssemblySettings] = useState<string>();
@@ -71,6 +71,11 @@ export default function Runs() {
     interpretations.data?.items.find((item) => item.interpretationId === interpretationId) ??
     selectedInterpretation.data;
   const revisionId = revisionChoice || interpretation?.revisions.at(-1)?.revisionId || '';
+  const alreadyInCorpus =
+    !!location &&
+    corpus.some(
+      (item) => item.captureId === location.captureId && item.assemblyId === location.assemblyId,
+    );
   const valid =
     corpus.length > 0 &&
     corpus.every((item) => item.settingsVersion === settingsChoice) &&
@@ -84,10 +89,7 @@ export default function Runs() {
   );
   return (
     <>
-      <UnsavedGuard
-        dirty={corpus.length > 0 || filters !== 'Все сообщения выбранных сборок'}
-        searchKeys={[]}
-      />
+      <UnsavedGuard dirty={corpus.length > 0} searchKeys={[]} />
       <PageHeading
         title="Проверки корпуса"
         subtitle="Запуски закрепляют ревизию, сборки и настройки. Проверка охватывает весь выбранный корпус."
@@ -128,7 +130,15 @@ export default function Runs() {
               </select>
             )}
           </Field>
-          <Field label="Сохранённая ревизия">
+          <Field
+            label="Сохранённая ревизия"
+            error={
+              interpretation &&
+              !interpretation.revisions.some((item) => item.revisionId === revisionId)
+                ? 'Выберите сохранённую ревизию этой интерпретации.'
+                : undefined
+            }
+          >
             {(id) => (
               <select
                 id={id}
@@ -141,6 +151,13 @@ export default function Runs() {
                   setParams(next, { replace: true });
                 }}
               >
+                {revisionId &&
+                  interpretation &&
+                  !interpretation.revisions.some((item) => item.revisionId === revisionId) && (
+                    <option value={revisionId} disabled>
+                      {revisionId} · недоступна в этой интерпретации
+                    </option>
+                  )}
                 {interpretation?.revisions.map((item) => (
                   <option key={item.revisionId} value={item.revisionId}>
                     {item.revisionId}
@@ -149,7 +166,15 @@ export default function Runs() {
               </select>
             )}
           </Field>
-          <Field label="Версия настроек">
+          <Field
+            label="Версия настроек"
+            error={
+              settings.data &&
+              !settings.data.some((item) => item.settingsVersion === settingsChoice)
+                ? 'Выберите доступную версию настроек.'
+                : undefined
+            }
+          >
             {(id) => (
               <select
                 id={id}
@@ -161,6 +186,12 @@ export default function Runs() {
                   setParams(next, { replace: true });
                 }}
               >
+                {settings.data &&
+                  !settings.data.some((item) => item.settingsVersion === settingsChoice) && (
+                    <option value={settingsChoice} disabled>
+                      {settingsChoice} · недоступна
+                    </option>
+                  )}
                 {settings.data?.map((item) => (
                   <option key={item.settingsVersion} value={item.settingsVersion}>
                     {item.settingsVersion} · {item.checksum}
@@ -186,7 +217,8 @@ export default function Runs() {
           }}
         />
         <Button
-          disabled={!location || !assemblySettings}
+          disabled={!location || !assemblySettings || alreadyInCorpus}
+          title={alreadyInCorpus ? 'Эта сборка уже включена в корпус' : undefined}
           onClick={() =>
             location &&
             assemblySettings &&
@@ -202,6 +234,9 @@ export default function Runs() {
         >
           Добавить сборку в корпус
         </Button>
+        {alreadyInCorpus && (
+          <p className="muted">Эта сборка уже включена в корпус. Выберите другую для добавления.</p>
+        )}
         <div className="corpus-list">
           {corpus.map((item) => (
             <div className="row between" key={item.captureId + item.assemblyId}>
@@ -226,10 +261,12 @@ export default function Runs() {
         )}
         <Field
           label="Область и фильтры проверки"
-          hint="Временная frontend-модель области; фактический формат фильтров ожидает BASE-02."
+          hint="Проверяются все сообщения каждой добавленной сборки. Диапазон выше помогает выбрать сборку и не ограничивает корпус."
         >
           {(id) => (
-            <input id={id} value={filters} onChange={(event) => setFilters(event.target.value)} />
+            <select id={id} value={filters} onChange={() => {}}>
+              <option value={filters}>Все сообщения выбранных сборок</option>
+            </select>
           )}
         </Field>
         <Button
@@ -357,7 +394,7 @@ export default function Runs() {
         </Banner>
         <Button
           variant="primary"
-          disabled={create.isPending}
+          disabled={!valid || create.isPending}
           onClick={() =>
             create.mutate(
               {
@@ -373,7 +410,6 @@ export default function Runs() {
                   trackJob(projectId, result.job.jobId);
                   setConfirm(false);
                   setCorpus([]);
-                  setFilters('Все сообщения выбранных сборок');
                   if (result.run) {
                     setCreatedRun(result.run.runId);
                   }

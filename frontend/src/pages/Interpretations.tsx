@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react';
 import { useProject } from '../app/Shell';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
+import { textError } from '../shared/model/validation';
 import {
   Button,
   Empty,
@@ -24,6 +25,8 @@ export default function Interpretations() {
     queryFn: ({ signal }) => api.interpretations({ projectId, cursor }, { signal }),
   });
   const [name, setName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
+  const nameProblem = textError(name, 'название интерпретации', 120);
   const [open, setOpen] = useState(false);
   const create = useCommand(
     'createInterpretation',
@@ -52,22 +55,39 @@ export default function Interpretations() {
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                create.mutate({ name }, { onSuccess: () => setOpen(false) });
+                if (nameProblem || create.isPending) return;
+                create.mutate(
+                  { name: name.trim() },
+                  {
+                    onSuccess: () => {
+                      setName('');
+                      setNameTouched(false);
+                      setOpen(false);
+                    },
+                  },
+                );
               }}
             >
-              <Field label="Название интерпретации">
+              <Field
+                label="Название интерпретации"
+                error={nameTouched ? nameProblem : undefined}
+                hint="От 1 до 120 символов."
+              >
                 {(id) => (
                   <input
                     id={id}
                     value={name}
-                    onChange={(event) => setName(event.target.value)}
+                    onChange={(event) => {
+                      setName(event.target.value);
+                      setNameTouched(true);
+                    }}
                     required
                     maxLength={120}
                   />
                 )}
               </Field>
               {create.error && <ErrorState error={create.error} />}
-              <Button variant="primary" type="submit" disabled={create.isPending}>
+              <Button variant="primary" type="submit" disabled={!!nameProblem || create.isPending}>
                 Создать интерпретацию
               </Button>
             </form>

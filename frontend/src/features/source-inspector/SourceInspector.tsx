@@ -188,6 +188,7 @@ export function SourceInspector({
         <CopyButton
           value={window.location.origin + link}
           label="Копировать прямую ссылку на источник"
+          description="Копировать ссылку на выбранный диапазон байтов, его сборку и исходные пакеты"
         />
       </div>
       <div className="selection-info">

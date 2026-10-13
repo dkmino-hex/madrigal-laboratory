@@ -6,12 +6,9 @@ import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
 import type { Evidence, Location } from '../shared/api/contracts/draft';
 import { UnsavedGuard } from '../shared/lib/use-unsaved';
-import {
-  formatTimestamp,
-  shiftTimestamp,
-  timestampSchema,
-  timestampNanoseconds,
-} from '../shared/model/precision';
+import { useBufferedParam } from '../shared/lib/use-buffered-param';
+import { textError, timeRangeInput } from '../shared/model/validation';
+import { formatTimestamp, formatShiftedTimestamp } from '../shared/model/precision';
 import { readLocation, sourceLink } from '../shared/model/navigation';
 import {
   Badge,
@@ -31,23 +28,25 @@ export default function Actions() {
   const projectId = useProject().projectId;
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
+  const search = useBufferedParam('q');
+  const typeSearch = useBufferedParam('type');
   const type = params.get('type') ?? '';
   const from = params.get('from') ?? '';
   const to = params.get('to') ?? '';
   const cursor = params.get('cursor') ?? '0';
   const actionId = params.get('actionId') ?? '';
   const evidenceCursor = params.get('evidenceCursor') ?? '0';
-  const timeError =
-    (from && !timestampSchema.safeParse(from).success) ||
-    (to && !timestampSchema.safeParse(to).success)
-      ? 'Нужно полное ISO-время с timezone; точность до наносекунды.'
-      : from && to && timestampNanoseconds(from) > timestampNanoseconds(to)
-        ? 'Начало времени позже конца.'
-        : '';
+  const timeRange = timeRangeInput(from, to);
+  const timeError = timeRange.fromError ?? timeRange.toError;
   const actions = useQuery({
     queryKey: queryKey(projectId, 'actions', { q, type, from, to, cursor }),
     queryFn: ({ signal }) => api.actions({ projectId, q, type, from, to, cursor }, { signal }),
     enabled: !timeError,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] &&
+      Reflect.get(previousQuery.queryKey[3] as object, 'cursor') === cursor
+        ? previous
+        : undefined,
   });
   const evidence = useQuery({
     queryKey: queryKey(projectId, 'evidence', { actionId, cursor: evidenceCursor }),
@@ -74,6 +73,8 @@ export default function Actions() {
   const [rangeDirty, setRangeDirty] = useState(false);
   const [editing, setEditing] = useState<Evidence | null>(null);
   const [editBasis, setEditBasis] = useState('');
+  const basisProblem = textError(basis, 'основание связи', 4000, false);
+  const editBasisProblem = textError(editBasis, 'основание связи', 4000, false);
   const [editStatus, setEditStatus] = useState<Evidence['status']>('tentative');
   const [discardEdit, setDiscardEdit] = useState(false);
   const editDirty = !!editing && (editBasis !== editing.basis || editStatus !== editing.status);
@@ -114,17 +115,25 @@ export default function Actions() {
             <input
               id={id}
               type="search"
-              value={q}
-              onChange={(event) => filter('q', event.target.value)}
+              value={search.value}
+              onChange={(event) => search.setValue(event.target.value)}
             />
           )}
         </Field>
         <Field label="Тип действия">
           {(id) => (
-            <input id={id} value={type} onChange={(event) => filter('type', event.target.value)} />
+            <input
+              id={id}
+              value={typeSearch.value}
+              onChange={(event) => typeSearch.setValue(event.target.value)}
+            />
           )}
         </Field>
-        <Field label="Время от, ISO с timezone">
+        <Field
+          label="Время от, ISO с timezone"
+          hint="Например, 2026-10-11T12:00:00Z или 2026-10-11T15:00:00+03:00."
+          error={timeRange.fromError}
+        >
           {(id) => (
             <input
               id={id}
@@ -134,13 +143,22 @@ export default function Actions() {
             />
           )}
         </Field>
-        <Field label="Время до, ISO с timezone">
+        <Field
+          label="Время до, ISO с timezone"
+          hint="Укажите полный момент времени с часовым поясом."
+          error={timeRange.toError}
+        >
           {(id) => (
             <input id={id} value={to} onChange={(event) => filter('to', event.target.value)} />
           )}
         </Field>
       </div>
       {timeError && <Banner tone="error">{timeError}</Banner>}
+      <div className="query-updating" role="status">
+        {search.pending || typeSearch.pending || actions.isFetching
+          ? 'Обновление списка действий…'
+          : ''}
+      </div>
       <section className="panel">
         <QueryState
           pending={actions.isPending && !timeError}
@@ -173,9 +191,7 @@ export default function Actions() {
                         </small>
                         <small>
                           Скорректировано:{' '}
-                          {formatTimestamp(
-                            shiftTimestamp(action.timestamp, action.offsetNanoseconds),
-                          )}
+                          {formatShiftedTimestamp(action.timestamp, action.offsetNanoseconds)}
                         </small>
                       </td>
                       <td>
@@ -191,6 +207,7 @@ export default function Actions() {
                         <Button
                           variant={actionId === action.actionId ? 'primary' : 'secondary'}
                           onClick={() => filter('actionId', action.actionId)}
+                          disabled={actions.isFetching || search.pending || typeSearch.pending}
                         >
                           Выбрать действие
                         </Button>
@@ -209,6 +226,7 @@ export default function Actions() {
           {actions.data && (
             <Pagination
               cursor={cursor}
+              busy={actions.isFetching || search.pending || typeSearch.pending}
               nextCursor={actions.data.nextCursor}
               total={actions.data.total}
               onChange={(value) => filter('cursor', value)}
@@ -241,7 +259,11 @@ export default function Actions() {
             }}
           />
         )}
-        <Field label="Основание связи">
+        <Field
+          label="Основание связи"
+          error={basisProblem}
+          hint="Необязательно. Рекомендуется пояснить связь, чтобы её было проще проверить; до 4000 символов."
+        >
           {(id) => (
             <textarea
               id={id}
@@ -249,6 +271,7 @@ export default function Actions() {
               disabled={save.isPending}
               onChange={(event) => setBasis(event.target.value)}
               maxLength={4000}
+              placeholder="При желании укажите основание связи"
             />
           )}
         </Field>
@@ -272,12 +295,12 @@ export default function Actions() {
             !actionId ||
             !location ||
             location.length === '0' ||
-            !basis.trim() ||
+            !!basisProblem ||
             save.isPending
           }
           onClick={() =>
             save.mutate(
-              { actionId, location, basis, status: confidence, kind: 'support' },
+              { actionId, location, basis: basis.trim(), status: confidence, kind: 'support' },
               {
                 onSuccess: () => {
                   setBasis('');
@@ -312,7 +335,7 @@ export default function Actions() {
             evidence.data.items.map((item) => (
               <article className="evidence-card" key={item.evidenceId}>
                 <Badge status={item.status} />
-                <p>{item.basis}</p>
+                <p>{item.basis || 'Основание не указано'}</p>
                 <Button
                   disabled={save.isPending}
                   onClick={() => {
@@ -345,7 +368,7 @@ export default function Actions() {
           ) : (
             <Empty
               title="Связей пока нет"
-              description="Выберите действие, диапазон и запишите основание."
+              description="Выберите действие и диапазон. Основание можно добавить по желанию."
             />
           )}
           {evidence.data && (
@@ -378,14 +401,14 @@ export default function Actions() {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (!editBasis.trim() || save.isPending) return;
+              if (editBasisProblem || save.isPending) return;
               save.mutate(
                 {
                   evidenceId: editing.evidenceId,
                   actionId: editing.actionId,
                   location: editing.location,
                   kind: editing.kind,
-                  basis: editBasis,
+                  basis: editBasis.trim(),
                   status: editStatus,
                 },
                 { onSuccess: () => setEditing(null) },
@@ -396,14 +419,17 @@ export default function Actions() {
               {editing.evidenceId} · {editing.location.assemblyId} · [{editing.location.start},{' '}
               {BigInt(editing.location.start) + BigInt(editing.location.length)})
             </code>
-            <Field label="Основание сохранённой связи">
+            <Field
+              label="Основание сохранённой связи"
+              error={editBasisProblem}
+              hint="Необязательно, до 4000 символов."
+            >
               {(id) => (
                 <textarea
                   id={id}
                   value={editBasis}
                   disabled={save.isPending}
                   maxLength={4000}
-                  required
                   onChange={(event) => setEditBasis(event.target.value)}
                 />
               )}
@@ -422,7 +448,7 @@ export default function Actions() {
               )}
             </Field>
             {save.error && <ErrorState error={save.error} />}
-            <Button type="submit" variant="primary" disabled={!editBasis.trim() || save.isPending}>
+            <Button type="submit" variant="primary" disabled={!!editBasisProblem || save.isPending}>
               Сохранить изменения связи
             </Button>
           </form>

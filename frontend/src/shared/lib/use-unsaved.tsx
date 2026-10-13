@@ -1,7 +1,9 @@
-import { useEffect } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { useBlocker, useBeforeUnload } from 'react-router-dom';
 import { Button, Modal } from '../ui/common';
+import { setNavigationBlocked } from './navigation-blocking';
 export function UnsavedGuard({ dirty, searchKeys }: { dirty: boolean; searchKeys?: string[] }) {
+  const owner = useRef(Symbol('unsaved-navigation'));
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     if (!dirty) return false;
     if (currentLocation.pathname !== nextLocation.pathname || searchKeys === undefined) return true;
@@ -15,12 +17,11 @@ export function UnsavedGuard({ dirty, searchKeys }: { dirty: boolean; searchKeys
       event.returnValue = '';
     }
   });
-  useEffect(
-    () => () => {
-      /* Router и useBeforeUnload освобождают слушатели */
-    },
-    [],
-  );
+  useLayoutEffect(() => {
+    const id = owner.current;
+    setNavigationBlocked(id, blocker.state === 'blocked');
+    return () => setNavigationBlocked(id, false);
+  }, [blocker.state]);
   return (
     <Modal
       open={blocker.state === 'blocked'}

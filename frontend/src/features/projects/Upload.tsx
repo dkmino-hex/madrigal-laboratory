@@ -6,6 +6,8 @@ import { queryKey } from '../../shared/api/query';
 import { createRequestKey, logicalRequest } from '../../shared/api/transport';
 import { Banner, Button, ErrorState, Field } from '../../shared/ui/common';
 import { trackJob, JobCard } from '../jobs/Jobs';
+import { fileError, timeOffsetInput, timeZoneError } from '../../shared/model/validation';
+import { TimeZoneSelect } from '../../shared/ui/TimeZoneSelect';
 export function UploadWidget({
   kind,
   projectId,
@@ -18,6 +20,10 @@ export function UploadWidget({
   const [offset, setOffset] = useState('0');
   const [job, setJob] = useState<{ projectId: string; jobId: string }>();
   const [notice, setNotice] = useState('');
+  const accept = kind === 'capture' ? '.pcap,.pcapng' : kind === 'project' ? '.zip' : '.csv';
+  const uploadProblem = fileError(file, accept.split(','));
+  const offsetInput = timeOffsetInput(offset);
+  const timeProblem = kind === 'csv' ? (timeZoneError(timeZone) ?? offsetInput.error) : undefined;
   const fileKey = useRef(createRequestKey());
   const getKey = useRef(logicalRequest());
   const client = useQueryClient();
@@ -25,6 +31,7 @@ export function UploadWidget({
     retry: false,
     mutationFn: async () => {
       if (!file) throw new Error('Выберите файл');
+      if (uploadProblem || timeProblem) throw new Error(uploadProblem ?? timeProblem);
       const operation =
         kind === 'capture'
           ? 'uploadCapture'
@@ -36,13 +43,16 @@ export function UploadWidget({
         idempotencyKey: getKey.current(operation, {
           fileKey: fileKey.current,
           projectId,
-          ...(kind === 'csv' ? { timeZone, offsetNanoseconds: offset } : {}),
+          ...(kind === 'csv' ? { timeZone, offsetNanoseconds: offsetInput.value! } : {}),
         }),
       };
       if (kind === 'capture') return api.uploadCapture({ projectId: projectId! }, options);
       if (kind === 'project')
         return api.importProject({ name: 'Перенесённое исследование' }, options);
-      return api.importActions({ projectId, timeZone, offsetNanoseconds: offset }, options);
+      return api.importActions(
+        { projectId, timeZone, offsetNanoseconds: offsetInput.value! },
+        options,
+      );
     },
     onSuccess: async (result) => {
       if ('job' in result) {
@@ -71,13 +81,13 @@ export function UploadWidget({
       if (projectId) await client.invalidateQueries({ queryKey: queryKey(projectId, 'project') });
     },
   });
-  const accept = kind === 'capture' ? '.pcap,.pcapng' : kind === 'project' ? '.zip' : '.csv';
   const label =
     kind === 'capture' ? 'Запись PCAP / PCAPNG' : kind === 'project' ? 'Проект ZIP' : 'Журнал CSV';
   return (
     <div className="upload-widget">
       <Field
         label={label}
+        error={uploadProblem}
         hint={
           kind === 'project'
             ? 'Версию, хеши и ссылки проверяет Workspace. Незавершённый импорт не готов для исследования.'
@@ -108,23 +118,32 @@ export function UploadWidget({
       )}
       {kind === 'csv' && (
         <div className="form-grid">
-          <Field label="Часовой пояс журнала">
+          <TimeZoneSelect
+            label="Часовой пояс журнала"
+            value={timeZone}
+            disabled={mutation.isPending}
+            onChange={(value) => {
+              setTimeZone(value);
+              mutation.reset();
+              setNotice('');
+            }}
+          />
+          <Field
+            label="Поправка времени, наносекунды"
+            error={offsetInput.error}
+            hint="Целое число; знак минус сдвигает время назад. 1 секунда = 1 000 000 000 нс."
+          >
             {(id) => (
               <input
                 id={id}
-                value={timeZone}
-                onChange={(event) => setTimeZone(event.target.value)}
-              />
-            )}
-          </Field>
-          <Field label="Поправка времени, наносекунды">
-            {(id) => (
-              <input
-                id={id}
-                inputMode="numeric"
+                inputMode="text"
                 value={offset}
-                onChange={(event) => setOffset(event.target.value)}
-                pattern="-?[0-9]+"
+                disabled={mutation.isPending}
+                onChange={(event) => {
+                  setOffset(event.target.value);
+                  mutation.reset();
+                  setNotice('');
+                }}
               />
             )}
           </Field>
@@ -132,7 +151,7 @@ export function UploadWidget({
       )}
       <Button
         variant="primary"
-        disabled={!file || mutation.isPending || (kind === 'csv' && !/^-?\d+$/.test(offset))}
+        disabled={!file || !!uploadProblem || !!timeProblem || mutation.isPending}
         onClick={() => mutation.mutate()}
       >
         <Upload size={15} aria-hidden="true" />

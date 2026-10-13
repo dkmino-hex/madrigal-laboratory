@@ -87,19 +87,28 @@ export function MoreChoices({
   query: {
     hasNextPage: boolean;
     isFetchingNextPage: boolean;
-    fetchNextPage: () => Promise<unknown>;
+    fetchNextPage: (options?: { cancelRefetch?: boolean }) => Promise<unknown>;
     isFetchNextPageError: boolean;
     error: unknown;
     paginationError: unknown;
     refetch: () => Promise<unknown>;
+    data?: { items: unknown[] };
   };
 }) {
   return (
     <div className="choices-pagination">
       {query.hasNextPage && (
-        <Button disabled={query.isFetchingNextPage} onClick={() => void query.fetchNextPage()}>
+        <Button
+          disabled={query.isFetchingNextPage}
+          onClick={() => void query.fetchNextPage({ cancelRefetch: false })}
+        >
           {query.isFetchingNextPage ? 'Загрузка…' : 'Загрузить ещё ' + label}
         </Button>
+      )}
+      {!query.hasNextPage && query.data && !query.error && !query.paginationError && (
+        <small className="muted" role="status">
+          Все {label} загружены
+        </small>
       )}
       {query.isFetchNextPageError && (
         <ErrorState error={query.error} retry={() => void query.fetchNextPage()} />

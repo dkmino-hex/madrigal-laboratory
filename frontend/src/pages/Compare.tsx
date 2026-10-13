@@ -422,7 +422,7 @@ export default function Compare() {
                 по себе не доказывает идентичность.
               </Banner>
             )}
-            <div className="table-scroll">
+            <div className="table-scroll parsed-fields-table">
               <table>
                 <thead>
                   <tr>
@@ -450,12 +450,18 @@ export default function Compare() {
                           {pair.right ? (pair.right.value ?? 'Неизвестно') : 'Несопоставимо'}
                         </td>
                         <td>
-                          {pair.left && (
-                            <Link to={sourceLink(pair.left.location)}>Левый источник</Link>
-                          )}
-                          {pair.right && (
-                            <Link to={sourceLink(pair.right.location)}>Правый источник</Link>
-                          )}
+                          <div className="toolbar">
+                            {pair.left && (
+                              <Link className="button ghost" to={sourceLink(pair.left.location)}>
+                                Левый источник
+                              </Link>
+                            )}
+                            {pair.right && (
+                              <Link className="button ghost" to={sourceLink(pair.right.location)}>
+                                Правый источник
+                              </Link>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

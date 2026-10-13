@@ -18,6 +18,7 @@ import {
 import { RunManifest, RunSummary } from '../features/runs/Summary';
 import { ResultsTable } from '../features/interpretations/Results';
 import { JobCard, trackJob } from '../features/jobs/Jobs';
+import { useBufferedParam } from '../shared/lib/use-buffered-param';
 export default function RunDetail() {
   const projectId = useProject().projectId;
   const runId = useParams().runId!;
@@ -25,6 +26,7 @@ export default function RunDetail() {
   const [params, setParams] = useSearchParams();
   const status = params.get('status') ?? '';
   const rule = params.get('rule') ?? '';
+  const ruleSearch = useBufferedParam('rule');
   const captureId = params.get('captureId') ?? '';
   const cursor = params.get('cursor') ?? '0';
   const query = useQuery({
@@ -150,8 +152,8 @@ export default function RunDetail() {
                 {(id) => (
                   <input
                     id={id}
-                    value={rule}
-                    onChange={(event) => filter('rule', event.target.value)}
+                    value={ruleSearch.value}
+                    onChange={(event) => ruleSearch.setValue(event.target.value)}
                   />
                 )}
               </Field>

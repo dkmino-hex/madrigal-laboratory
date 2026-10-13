@@ -231,6 +231,16 @@ export const api = {
         (!params.hypothesisId || data.hypothesisId === params.hypothesisId) &&
         data.evidence.every((proof) => ownEvidence(proof, params.projectId)),
     ),
+  deleteHypothesis: (projectId: string, hypothesisId: string, options?: RequestOptions) =>
+    checked(
+      request(
+        'deleteHypothesis',
+        { projectId, hypothesisId },
+        z.object({ projectId: z.string(), hypothesisId: z.string(), deleted: z.literal(true) }),
+        options,
+      ),
+      (data) => data.projectId === projectId && data.hypothesisId === hypothesisId,
+    ),
   interpretations: (params: Record<string, unknown>, options?: RequestOptions) =>
     checked(
       request('interpretations', params, dto.pageSchema(dto.interpretationSchema), options),

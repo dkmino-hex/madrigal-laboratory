@@ -11,6 +11,8 @@ import type { Location } from '../shared/api/contracts/draft';
 import { decimal, decimalSchema, formatInteger, formatTimestamp } from '../shared/model/precision';
 import { readLocation, safeReturnPath, sameContext } from '../shared/model/navigation';
 import { readPreference, savePreference } from '../shared/lib/storage';
+import { useBufferedParam } from '../shared/lib/use-buffered-param';
+import { rangeInput } from '../shared/model/validation';
 import {
   Banner,
   Button,
@@ -39,7 +41,7 @@ export default function Traffic() {
     Math.min(500, Math.max(260, Number(readPreference('traffic:right') ?? 300))),
   );
   const [pendingAssembly, setPendingAssembly] = useState<string>();
-  const [inputError, setInputError] = useState('');
+  const [inputErrors, setInputErrors] = useState<{ start?: string; length?: string }>({});
   let direct: Location | null = null;
   let linkError: Error | undefined;
   try {
@@ -54,6 +56,7 @@ export default function Traffic() {
     {},
     true,
     params.get('captureId') ?? '',
+    (capture) => capture.status === 'READY',
   );
   const captureId =
     params.get('captureId') ??
@@ -71,12 +74,19 @@ export default function Traffic() {
     );
   const sessionCursor = params.get('sessionCursor') ?? '0';
   const q = params.get('q') ?? '';
+  const search = useBufferedParam('q', 'sessionCursor');
   const defects = params.get('defects') ?? '';
   const sessions = useQuery({
     queryKey: queryKey(projectId, 'sessions', { captureId, cursor: sessionCursor, q, defects }),
     queryFn: ({ signal }) =>
       api.sessions({ projectId, captureId, cursor: sessionCursor, q, defects }, { signal }),
     enabled: selectedCapture?.status === 'READY' && !linkError,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[3] &&
+      Reflect.get(previousQuery.queryKey[3] as object, 'captureId') === captureId &&
+      Reflect.get(previousQuery.queryKey[3] as object, 'cursor') === sessionCursor
+        ? previous
+        : undefined,
   });
   const sessionId = params.get('sessionId') ?? sessions.data?.items[0]?.sessionId ?? '';
   const session = sessions.data?.items.find((item) => item.sessionId === sessionId);
@@ -170,33 +180,30 @@ export default function Traffic() {
   });
   function updateSelection(start: string, length: string, moveWindow: boolean | string = false) {
     if (!selection) return;
-    const a = decimalSchema.safeParse(start);
-    const b = decimalSchema.safeParse(length);
-    if (
-      !a.success ||
-      !b.success ||
-      !assembly ||
-      BigInt(a.data) + BigInt(b.data) > BigInt(assembly.length)
-    ) {
-      setInputError('Диапазон должен быть точным и находиться внутри сборки');
+    const range = rangeInput(start, length, assembly?.length, true);
+    if (!assembly || !range.valid) {
+      setInputErrors({ start: range.startError, length: range.lengthError });
       return;
     }
     const next = new URLSearchParams(params);
-    Object.entries({ ...selection, start: a.data, length: b.data }).forEach(([key, value]) =>
-      next.set(key, value),
+    Object.entries({ ...selection, start: range.start!, length: range.length! }).forEach(
+      ([key, value]) => next.set(key, value),
     );
     if (moveWindow)
       next.set(
         'window',
-        typeof moveWindow === 'string' ? moveWindow : String((BigInt(a.data) / 4096n) * 4096n),
+        typeof moveWindow === 'string'
+          ? moveWindow
+          : String((BigInt(range.start!) / 4096n) * 4096n),
       );
-    setInputError('');
+    setInputErrors({});
     setParams(next, { replace: true });
   }
   function changeAssembly(id: string) {
     const nextAssembly = assemblies.data?.items.find((item) => item.assemblyId === id);
     if (!nextAssembly) return;
-    const next = new URLSearchParams({
+    const next = new URLSearchParams(params);
+    Object.entries({
       projectId,
       captureId,
       sessionId,
@@ -205,8 +212,9 @@ export default function Traffic() {
       assemblyId: id,
       start: selectedStart,
       length: selectedLength,
-    });
-    setParams(next);
+    }).forEach(([key, value]) => next.set(key, value));
+    for (const key of ['packetNo', 'runId', 'revisionId']) next.delete(key);
+    setParams(next, { flushSync: true });
     setPendingAssembly(undefined);
   }
   const returnPath = safeReturnPath(params.get('returnTo'), projectId);
@@ -296,10 +304,14 @@ export default function Traffic() {
                     ])
                       next.delete(key);
                     next.set('captureId', event.target.value);
-                    setParams(next);
+                    setParams(next, { flushSync: true });
                   }}
                 >
-                  <option value="">Выберите запись</option>
+                  {!captureId && (
+                    <option value="" disabled>
+                      Нет готовых записей
+                    </option>
+                  )}
                   {captureId &&
                     !captures.data?.items.some((item) => item.captureId === captureId) && (
                       <option value={captureId}>{captureId} · выбранная запись</option>
@@ -318,19 +330,17 @@ export default function Traffic() {
             </Field>
             <MoreChoices label="записи" query={captures} />
           </QueryState>
-          <Field label="Адрес или порт">
+          <Field
+            label="Адрес или порт"
+            hint="Поиск по адресам сторон, например 192.168.10.42 или 502."
+          >
             {(id) => (
               <input
                 id={id}
                 type="search"
                 placeholder="Например, 502…"
-                value={q}
-                onChange={(event) => {
-                  const next = new URLSearchParams(params);
-                  next.set('q', event.target.value);
-                  next.delete('sessionCursor');
-                  setParams(next, { replace: true });
-                }}
+                value={search.value}
+                onChange={(event) => search.setValue(event.target.value)}
               />
             )}
           </Field>
@@ -340,13 +350,21 @@ export default function Traffic() {
               checked={defects === 'true'}
               onChange={(event) => {
                 const next = new URLSearchParams(params);
-                next.set('defects', event.target.checked ? 'true' : '');
+                if (event.target.checked) next.set('defects', 'true');
+                else next.delete('defects');
                 next.delete('sessionCursor');
-                setParams(next);
+                setParams(next, { flushSync: true });
               }}
             />
             Только с дефектами
           </label>
+          <small className="muted">
+            Неполные сессии, пропуски, конфликты и усечение. Одинаковые ретрансляции сохраняются как
+            источники.
+          </small>
+          <div className="query-updating" role="status">
+            {search.pending || sessions.isFetching ? 'Поиск сессий…' : ''}
+          </div>
           {captureId ? (
             <QueryState
               pending={sessions.isPending}
@@ -358,6 +376,7 @@ export default function Traffic() {
                   type="button"
                   className={'session-card ' + (item.sessionId === sessionId ? 'active' : '')}
                   key={item.sessionId}
+                  disabled={sessions.isFetching || search.pending}
                   onClick={() => {
                     const next = new URLSearchParams();
                     for (const key of [
@@ -374,7 +393,7 @@ export default function Traffic() {
                     }
                     next.set('captureId', captureId);
                     next.set('sessionId', item.sessionId);
-                    setParams(next);
+                    setParams(next, { flushSync: true });
                   }}
                 >
                   <strong>TCP · поколение {item.generation}</strong>
@@ -395,6 +414,12 @@ export default function Traffic() {
                   ))}
                 </button>
               ))}
+              {sessions.data && !sessions.data.items.length && (
+                <Empty
+                  title="Сессий нет"
+                  description="Измените адрес или порт либо снимите фильтр дефектов."
+                />
+              )}
               {sessions.data && (
                 <Pagination
                   cursor={sessionCursor}
@@ -402,9 +427,10 @@ export default function Traffic() {
                   onChange={(value) => {
                     const next = new URLSearchParams(params);
                     next.set('sessionCursor', value);
-                    setParams(next);
+                    setParams(next, { flushSync: true });
                   }}
                   total={sessions.data.total}
+                  busy={sessions.isFetching || search.pending}
                 />
               )}
             </QueryState>
@@ -442,7 +468,10 @@ export default function Traffic() {
                 </select>
               )}
             </Field>
-            <Field label="Сборка">
+            <Field
+              label="Сборка"
+              hint="Сборки в процессе подготовки и с ошибкой недоступны для исследования."
+            >
               {(id) => (
                 <select
                   id={id}
@@ -461,7 +490,12 @@ export default function Traffic() {
                         value={item.assemblyId}
                         disabled={item.status !== 'READY'}
                       >
-                        {item.assemblyId} · {item.settingsVersion} · {item.status}
+                        {item.assemblyId} · {item.settingsVersion} ·{' '}
+                        {item.status === 'BUILDING'
+                          ? 'Ещё собирается'
+                          : item.status === 'READY'
+                            ? 'READY · Готова'
+                            : 'Ошибка сборки'}
                       </option>
                     ))}
                 </select>
@@ -508,7 +542,11 @@ export default function Traffic() {
                   updateSelection(String(data.get('start')), String(data.get('length')), true);
                 }}
               >
-                <Field label="Начало, байт">
+                <Field
+                  label="Начало, байт"
+                  error={inputErrors.start}
+                  hint="Целое смещение от начала потока, начиная с 0."
+                >
                   {(id) => (
                     <input
                       key={selection.start}
@@ -517,10 +555,15 @@ export default function Traffic() {
                       inputMode="numeric"
                       className="mono"
                       defaultValue={selection!.start}
+                      onChange={() => setInputErrors((errors) => ({ ...errors, start: undefined }))}
                     />
                   )}
                 </Field>
-                <Field label="Длина, байт">
+                <Field
+                  label="Длина, байт"
+                  error={inputErrors.length}
+                  hint="Число байтов; 0 снимает выделение."
+                >
                   {(id) => (
                     <input
                       key={selection.length}
@@ -529,12 +572,14 @@ export default function Traffic() {
                       inputMode="numeric"
                       className="mono"
                       defaultValue={selection!.length}
+                      onChange={() =>
+                        setInputErrors((errors) => ({ ...errors, length: undefined }))
+                      }
                     />
                   )}
                 </Field>
                 <Button type="submit">Перейти к диапазону</Button>
               </form>
-              {inputError && <Banner tone="error">{inputError}</Banner>}
               <span className="sr-only" aria-live="polite">
                 Выделено от {selection.start}, длина {selection.length} байт
               </span>

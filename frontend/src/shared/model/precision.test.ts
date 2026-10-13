@@ -8,6 +8,7 @@ import {
   hexOffset,
   intersect,
   formatTimestamp,
+  formatShiftedTimestamp,
   shiftTimestamp,
   boundedIndex,
   timestampNanoseconds,
@@ -58,4 +59,15 @@ describe('Точные координаты и время', () => {
   );
   it('принимает календарно корректный високосный день', () =>
     expect(timestampSchema.safeParse('2024-02-29T15:34:56.123456789+03:00').success).toBe(true));
+  it('не обрезает расширенный год и не роняет журнал при слишком большой поправке', () => {
+    expect(() => shiftTimestamp('9999-12-31T23:59:59Z', '1000000000')).toThrow(
+      /календарного диапазона/,
+    );
+    expect(formatShiftedTimestamp('2026-10-11T12:00:00Z', '9'.repeat(30))).toContain(
+      'проверьте дату и поправку',
+    );
+    expect(formatShiftedTimestamp('2026-10-11T12:00:00.000000001Z', '-1')).toBe(
+      '2026-10-11 12:00:00.000000000 UTC',
+    );
+  });
 });

@@ -22,6 +22,7 @@ export const operations = {
   saveEvidence: { owner: 'Workspace', mutation: true },
   hypotheses: { owner: 'Workspace', mutation: false },
   saveHypothesis: { owner: 'Workspace', mutation: true },
+  deleteHypothesis: { owner: 'Workspace', mutation: true },
   interpretations: { owner: 'Analysis', mutation: false },
   interpretation: { owner: 'Analysis', mutation: false },
   createInterpretation: { owner: 'Analysis', mutation: true },

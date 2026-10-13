@@ -1,9 +1,31 @@
 import { it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HexViewer } from './HexViewer';
 import { goldenLocation, fixtureWindow } from '../../mocks/fixtures/corpus';
 import { decimal } from '../../shared/model/precision';
+it.each(['HEX', 'ASCII'])(
+  'отсутствующий буфер при копировании %s объясняется без внутренней JS-ошибки',
+  async (mode) => {
+    const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    try {
+      render(
+        <HexViewer
+          window={fixtureWindow(goldenLocation, '65536')}
+          selection={goldenLocation}
+          onSelect={vi.fn()}
+          onWindow={vi.fn()}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Копировать ' + mode }));
+      expect(await screen.findByText('Буфер обмена недоступен')).toBeVisible();
+    } finally {
+      if (original) Object.defineProperty(navigator, 'clipboard', original);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  },
+);
 it('клавиатура сохраняет абсолютное выделение через границу окна', async () => {
   const user = userEvent.setup();
   const select = vi.fn();

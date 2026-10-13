@@ -118,15 +118,19 @@ export function HexViewer({
     revealColumns(scroll.current, header.current, offset - BigInt(window.location.start));
     onSelect(String(start), String(end - start + 1n), windowStart);
   }
-  function copy(mode: 'hex' | 'ascii') {
+  async function copy(mode: 'hex' | 'ascii') {
+    let value: string;
     try {
-      const value = copyKnown(window, selection, mode);
-      void navigator.clipboard.writeText(value).then(
-        () => setCopyError('Скопировано'),
-        () => setCopyError('Буфер обмена недоступен'),
-      );
+      value = copyKnown(window, selection, mode);
     } catch (error) {
       setCopyError(error instanceof Error ? error.message : 'Копирование недоступно');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopyError('Скопировано');
+    } catch {
+      setCopyError('Буфер обмена недоступен');
     }
   }
   const start = BigInt(selection.start);
