@@ -15,6 +15,7 @@
 !/docs/backend1-*.md
 !/docs/architecture.md
 !/docs/refactoring-verification.md
+!/docs/integration.md
 /bin/
 /dist/
 /coverage.out

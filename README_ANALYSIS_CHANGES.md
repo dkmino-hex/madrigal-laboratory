@@ -1,5 +1,7 @@
 # Мадригал — Analysis, задачи 13 октября
 
+Это исторический отчёт исходной ветки. В объединённой рабочей области Analysis находится в `services/analysis-service`, Gateway — в `services/gateway-service`. Актуальные запуск и проверки описаны в [README](README.md); команда Compose для Analysis теперь `docker compose up --build -d analysis-service`.
+
 ## Что добавлено
 - POST /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions
 - GET /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions

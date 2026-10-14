@@ -203,10 +203,14 @@ func (s *RunsService) launch(run domain.Run) error {
 // Worker cancels and joins every run before the composition root closes SQLite.
 func (s *RunsService) Worker(ctx context.Context) error {
 	<-ctx.Done()
+	s.Stop()
+	return ctx.Err()
+}
+
+func (s *RunsService) Stop() {
 	s.mu.Lock()
 	s.closed = true
 	s.cancel()
 	s.mu.Unlock()
 	s.wg.Wait()
-	return ctx.Err()
 }

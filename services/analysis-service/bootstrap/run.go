@@ -30,6 +30,7 @@ func Run() error {
 	capture := capture.New(service.Env("CAPTURE_URL", "http://capture-service:8082"))
 	workspace := workspace.New(service.Env("WORKSPACE_URL", "http://workspace-service:8081"))
 	runs := analysis.NewRunsService(repo, capture)
+	defer runs.Stop()
 	runs.Workspace = workspace
 	if err = repo.RecoverRuns(context.Background()); err != nil {
 		return err
