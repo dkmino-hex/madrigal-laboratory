@@ -73,7 +73,7 @@ func TestInterpretationsAndRevisions(t *testing.T) {
 		t.Fatal("project isolation failed")
 	}
 	revPath := base + "/" + id + "/revisions"
-	second := request(t, router, "POST", revPath, `{"revision":{"fields":[{"name":"a"}]}}`, 201)
+	second := request(t, router, "POST", revPath, `{"revision":{"fields":[{"name":"a","type":"uint8"}]}}`, 201)
 	if second["version"] != float64(2) {
 		t.Fatalf("want version 2: %v", second)
 	}

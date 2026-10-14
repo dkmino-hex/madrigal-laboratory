@@ -3,23 +3,30 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        SERVICE: gateway
-    ports:
-      - "8080:8080"
+      args: { SERVICE: gateway }
+    ports: ["8080:8080"]
+    environment:
+      ANALYSIS_URL: http://analysis:8083
+      WORKSPACE_URL: ${WORKSPACE_URL:-http://workspace-service:8081}
+      CAPTURE_URL: ${CAPTURE_URL:-http://capture-service:8082}
+    networks: [default, backend1]
 
   analysis:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        SERVICE: analysis
-    ports:
-      - "8083:8083"
+      args: { SERVICE: analysis }
+    ports: ["8083:8083"]
     environment:
       DB_PATH: /data/analysis.db
-    volumes:
-      - analysis-data:/data
+      CAPTURE_URL: ${CAPTURE_URL:-http://capture-service:8082}
+      WORKSPACE_URL: ${WORKSPACE_URL:-http://workspace-service:8081}
+    volumes: ["analysis-data:/data"]
+    networks: [default, backend1]
 
 volumes:
   analysis-data:
+networks:
+  backend1:
+    external: true
+    name: ${BACKEND1_NETWORK:-madrigal_default}

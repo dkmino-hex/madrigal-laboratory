@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dkmino-hex/madrigal-laboratory/internal/analysis/engine"
 	"github.com/dkmino-hex/madrigal-laboratory/internal/analysis/model"
 	"github.com/dkmino-hex/madrigal-laboratory/internal/analysis/repository"
 )
@@ -101,14 +102,8 @@ func (s *InterpretationService) CreateRevision(ctx context.Context, input Create
 }
 
 func validateRevision(data json.RawMessage) error {
-	if !json.Valid(data) {
-		return fmt.Errorf("%w: revision must be valid JSON", ErrInvalidInput)
-	}
-	var v struct {
-		Fields []json.RawMessage `json:"fields"`
-	}
-	if len(data) == 0 || data[0] != '{' || json.Unmarshal(data, &v) != nil || v.Fields == nil {
-		return fmt.Errorf("%w: revision must be an object with a fields array", ErrInvalidInput)
+	if _, err := engine.Validate(string(data)); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	return nil
 }
