@@ -1,6 +1,9 @@
 FROM golang:1.26-alpine AS build
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY go.mod go.sum go.work ./
+COPY platform/go.mod platform/go.sum ./platform/
+COPY services/capture-service/go.mod services/capture-service/go.sum ./services/capture-service/
+COPY services/workspace-service/go.mod services/workspace-service/go.sum ./services/workspace-service/
 RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o /out/ ./cmd/workspace-service ./cmd/capture-service ./cmd/capture-prepare ./cmd/migrate

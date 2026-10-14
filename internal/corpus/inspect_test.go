@@ -11,10 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dkmino-hex/madrigal-laboratory/internal/corpus"
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/gopacket/gopacket/pcapgo"
+
+	"github.com/dkmino-hex/madrigal-laboratory/internal/corpus"
 )
 
 func TestProvidedAcceptanceCorpus(t *testing.T) {

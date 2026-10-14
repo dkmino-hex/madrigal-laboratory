@@ -6,13 +6,21 @@
 
 /postman/
 /docs/
+!/postman/
+/postman/*
+!/postman/madrigal-backend1.postman_collection.json
+!/postman/README.md
+!/docs/
+/docs/*
+!/docs/backend1-*.md
+!/docs/architecture.md
+!/docs/refactoring-verification.md
 /bin/
 /dist/
 /coverage.out
 .env
 .env.*
 !.env.example
-*_test.go
 
 *.sqlite3
 *.sqlite3-wal

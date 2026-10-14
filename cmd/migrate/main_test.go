@@ -2,10 +2,11 @@ package main
 
 import (
 	"bytes"
-	"github.com/dkmino-hex/madrigal-laboratory/internal/testdatabase"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/dkmino-hex/madrigal-laboratory/platform/testdatabase"
 )
 
 func TestMigrateCLI(t *testing.T) {

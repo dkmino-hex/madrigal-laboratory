@@ -1,6 +1,10 @@
 #!/bin/sh
 set -eu
 
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
 workspace-service &
 workspace_pid=$!
 capture-service &

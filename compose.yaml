@@ -1,29 +1,46 @@
 name: madrigal
 
 services:
-  laboratory:
+  workspace-service:
     build:
       context: .
+    command: [workspace-service]
     environment:
       WORKSPACE_DB_PATH: /data/workspace/workspace.sqlite
       WORKSPACE_HTTP_ADDR: 0.0.0.0:8081
+      CAPTURE_INTERNAL_URL: http://capture-service:8082
+      ANALYSIS_INTERNAL_URL: ${ANALYSIS_INTERNAL_URL:-http://analysis-service:8083}
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - workspace-files:/data/workspace
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8081/readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    init: true
+    stop_grace_period: 20s
+
+  capture-service:
+    build:
+      context: .
+    command: [capture-service]
+    environment:
       CAPTURE_DB_PATH: /data/capture/capture.sqlite
       CAPTURE_HTTP_ADDR: 0.0.0.0:8082
       CAPTURE_DATA_DIR: /data/capture
+      WORKSPACE_INTERNAL_URL: http://workspace-service:8081
     ports:
-      - "127.0.0.1:8081:8081"
       - "127.0.0.1:8082:8082"
     volumes:
-      - workspace-files:/data/workspace
       - capture-files:/data/capture
       - ./testdata/sample_protocol:/fixtures:ro
-    networks:
-      default:
-        aliases:
-          - workspace-service
-          - capture-service
+    depends_on:
+      workspace-service:
+        condition: service_healthy
     healthcheck:
-      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8081/readyz && wget -q -O /dev/null http://127.0.0.1:8082/readyz"]
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8082/readyz"]
       interval: 5s
       timeout: 3s
       retries: 12

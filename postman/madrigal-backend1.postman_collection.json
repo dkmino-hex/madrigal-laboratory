@@ -1,0 +1,936 @@
+{
+  "info": {
+    "name": "Мадригал — Backend 1 (Workspace + Capture)",
+    "_postman_id": "a2767e3a-9127-4f7e-b1d9-a83021415210",
+    "description": "Локальная проверка Workspace и Capture по дням 1–5. Переменные коллекции заполняются ответами. ZIP-экспорт, импорт и отчёт требуют Analysis Backend 2. Для file/form-data выбирайте локальные файлы вручную.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "workspaceBase",
+      "value": "http://127.0.0.1:8081"
+    },
+    {
+      "key": "captureBase",
+      "value": "http://127.0.0.1:8082"
+    },
+    {
+      "key": "projectId",
+      "value": ""
+    },
+    {
+      "key": "originalSettingsVersion",
+      "value": ""
+    },
+    {
+      "key": "settingsVersion",
+      "value": ""
+    },
+    {
+      "key": "captureId",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    },
+    {
+      "key": "assemblyId",
+      "value": ""
+    },
+    {
+      "key": "newAssemblyId",
+      "value": ""
+    },
+    {
+      "key": "sessionId",
+      "value": ""
+    },
+    {
+      "key": "streamId",
+      "value": ""
+    },
+    {
+      "key": "viewId",
+      "value": ""
+    },
+    {
+      "key": "journalId",
+      "value": ""
+    },
+    {
+      "key": "actionId",
+      "value": ""
+    },
+    {
+      "key": "observationId",
+      "value": ""
+    },
+    {
+      "key": "captureSha",
+      "value": ""
+    },
+    {
+      "key": "captureSnapshotId",
+      "value": ""
+    },
+    {
+      "key": "artifactId",
+      "value": ""
+    },
+    {
+      "key": "importId",
+      "value": ""
+    },
+    {
+      "key": "importedProjectId",
+      "value": ""
+    },
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "searchPattern",
+      "value": "00"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 · Workspace",
+      "description": "Сначала выполните Create project: он заполнит projectId и settingsVersion.",
+      "item": [
+        {
+          "name": "Health · Workspace",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/readyz",
+            "description": ""
+          }
+        },
+        {
+          "name": "Create project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{workspaceBase}}/api/v1/projects",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman check\",\n  \"settings\": {}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('projectId', data.projectId);",
+                  "pm.collectionVariables.set('settingsVersion', data.settingsVersion);",
+                  "pm.collectionVariables.set('originalSettingsVersion', data.settingsVersion);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects?limit=20",
+            "description": ""
+          }
+        },
+        {
+          "name": "Get project",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "Get current context",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/internal/v1/projects/{{projectId}}/context?settingsVersion=current",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Capture import",
+      "description": "Upload принимает файл только как multipart form-data с ключом file; ответ 202, работа продолжается в фоне.",
+      "item": [
+        {
+          "name": "Health · Capture",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/readyz",
+            "description": ""
+          }
+        },
+        {
+          "name": "Upload PCAP or PCAPNG",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures",
+            "description": "Body → form-data → file: выберите PCAP/PCAPNG. Не задавайте Content-Type вручную: Postman добавит multipart boundary. Повторное содержимое вернет duplicate: true.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "После импорта выберите testdata/sample_protocol/research/01_configuration.pcap"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Accepted', () => pm.response.to.have.status(202));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('captureId', data.captureId);",
+                  "pm.collectionVariables.set('jobId', data.jobId);",
+                  "pm.collectionVariables.set('captureSha', data.sha256);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get import job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/jobs/{{jobId}}",
+            "description": "Повторяйте Send, пока status не станет SUCCEEDED. Затем переходите к сессиям."
+          }
+        },
+        {
+          "name": "List captures",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures?limit=20",
+            "description": ""
+          }
+        },
+        {
+          "name": "List assemblies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures/{{captureId}}/assemblies",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "const ready = (data.items || []).find(x => x.status === 'READY');",
+                  "if (ready) pm.collectionVariables.set('assemblyId', ready.assemblyId);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 · Packets, sessions, bytes",
+      "description": "Get session выбирает первый непустой streamId. Если проверяете точное поле baseline и источники не 4/6, возьмите другое направление из ответа карточки.",
+      "item": [
+        {
+          "name": "Get packet 1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures/{{captureId}}/packets/1",
+            "description": ""
+          }
+        },
+        {
+          "name": "List sessions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/sessions?assemblyId={{assemblyId}}&limit=20",
+            "description": "Baseline должен дать два поколения соединения."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.items && data.items.length) pm.collectionVariables.set('sessionId', data.items[0].sessionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get session",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/sessions/{{sessionId}}?assemblyId={{assemblyId}}",
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "const stream = (data.streams || []).find(x => Number(x.logicalLength) > 0);",
+                  "if (stream) pm.collectionVariables.set('streamId', stream.streamId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read stream bytes [2,4)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/streams/{{streamId}}/bytes?assemblyId={{assemblyId}}&offset=2&length=2",
+            "description": ""
+          }
+        },
+        {
+          "name": "Read SourceMap [2,4)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/streams/{{streamId}}/sources?assemblyId={{assemblyId}}&offset=2&length=2",
+            "description": "У нужного направления baseline ожидаются packetNo 4/frame [56,57) и packetNo 6/frame [54,55). Если выбран другой streamId, откройте карточку сессии и возьмите второе направление."
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 · Settings and repeat assembly",
+      "description": "После новой версии настроек повторная сборка получает другой assemblyId. Старую можно читать по прежнему assemblyId.",
+      "item": [
+        {
+          "name": "Create settings version",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/settings",
+            "description": "Создает новую неизменяемую settingsVersion. Текущий TCP-движок сохраняет эти настройки, но произвольные ключи пока не меняют его алгоритм.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {\n    \"demo\": \"postman\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Updated', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('settingsVersion', data.settingsVersion);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get original settings context",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/internal/v1/projects/{{projectId}}/context?settingsVersion={{originalSettingsVersion}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "Create new assembly",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures/{{captureId}}/assemblies",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"settingsVersion\":\"{{settingsVersion}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Assembly accepted', () => pm.response.to.have.status(202));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('newAssemblyId', data.assemblyId);",
+                  "pm.collectionVariables.set('jobId', data.jobId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get assembly job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/jobs/{{jobId}}",
+            "description": "Повторяйте до SUCCEEDED."
+          }
+        },
+        {
+          "name": "List old and new assemblies",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures/{{captureId}}/assemblies",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · Internal assembly views",
+      "description": "Это внутренний API Capture для Analysis. Проверяйте его только на локальных адресах двух сервисов.",
+      "item": [
+        {
+          "name": "Create assembly view",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{captureBase}}/internal/v1/projects/{{projectId}}/assembly-views",
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"ranges\":[{\"assemblyId\":\"{{assemblyId}}\",\"streamId\":\"{{streamId}}\",\"offset\":0,\"length\":1}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('View created', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('viewId', data.viewId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read assembly view data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/internal/v1/assembly-views/{{viewId}}/data?limit=16",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · Журнал и наблюдения",
+      "description": "Ручки Workspace по дням 3–4. Для CSV выберите файл в form-data; действие из CSV сохраните в actionId.",
+      "item": [
+        {
+          "name": "Import action journal",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/action-log",
+            "description": "file = testdata/sample_protocol/action_journal.csv; timezone и timeOffsetNs задают контекст времени.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                },
+                {
+                  "key": "timezone",
+                  "type": "text",
+                  "value": "UTC"
+                },
+                {
+                  "key": "timeOffsetNs",
+                  "type": "text",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Queued', () => pm.response.to.have.status(202));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('journalId', data.importId);",
+                  "pm.collectionVariables.set('jobId', data.jobId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Workspace job",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/jobs/{{jobId}}",
+            "description": "Дождитесь SUCCEEDED. Состояния FAILED/CANCELLED требуют проверки диагностики."
+          }
+        },
+        {
+          "name": "Actions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/actions?limit=20",
+            "description": "Фильтры: from/to (RFC3339 или Unix ns), type, cursor, limit. incompleteImports отличает неполный журнал."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "if (data.items?.length) pm.collectionVariables.set('actionId', data.items[0].actionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create observation",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/observations",
+            "description": "evidence проверяется через Capture. Для кадра без привязки к stream поля assemblyId/streamId/streamOffset опускаются.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"kind\": \"HYPOTHESIS\",\n  \"text\": \"Проверить изменение конфигурации\",\n  \"status\": \"DRAFT\",\n  \"actionId\": \"{{actionId}}\",\n  \"evidence\": [\n    {\n      \"kind\": \"CONTEXT\",\n      \"captureId\": \"{{captureId}}\",\n      \"captureSha256\": \"{{captureSha}}\",\n      \"packetNo\": 1,\n      \"frameOffset\": 0,\n      \"byteLength\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('observationId', pm.response.json().observationId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Observations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/observations?limit=20",
+            "description": "Фильтры kind, status, source (capture SHA-256), cursor."
+          }
+        },
+        {
+          "name": "Update observation",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/observations/{{observationId}}",
+            "description": "Меняет статус, текст или selectedEvidenceIds; исходные байты evidence неизменяемы.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"INCONCLUSIVE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Workspace snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{workspaceBase}}/internal/v1/projects/{{projectId}}/snapshots",
+            "description": "Закрепляет согласованное состояние Workspace и возвращает manifest с metadataSha256.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 · Поиск и диагностика Capture",
+      "item": [
+        {
+          "name": "Search stream HEX",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/streams/{{streamId}}/search?assemblyId={{assemblyId}}&mode=HEX&pattern={{searchPattern}}&limit=20",
+            "description": "Ищет только в известных интервалах; cursor из nextCursor. Для ASCII замените mode=ASCII и pattern на текст."
+          }
+        },
+        {
+          "name": "Checksum and packet diagnostics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/api/v1/projects/{{projectId}}/captures/{{captureId}}/packets/1",
+            "description": "checksumStatus: VALID, INVALID, OFFLOADED (предполагаемая частичная checksum), UNKNOWN."
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 · Снимки и перенос",
+      "description": "Проектный экспорт/импорт требует Analysis Backend 2 по внутреннему HTTP-контракту.",
+      "item": [
+        {
+          "name": "Capture snapshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{captureBase}}/internal/v1/projects/{{projectId}}/snapshots",
+            "description": "Пустой выбор закрепляет все готовые Capture/assemblies проекта.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('captureSnapshotId', data.snapshotId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download Capture snapshot ZIP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{captureBase}}/internal/v1/snapshots/{{captureSnapshotId}}/archive",
+            "description": "Используйте Send and Download; архив содержит originals, data и manifest.json."
+          }
+        },
+        {
+          "name": "Validate evidence source",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{captureBase}}/internal/v1/projects/{{projectId}}/evidence/validate",
+            "description": "Внутренняя проверка Workspace→Capture перед публикацией восстановленного проекта. Проверяет пакет и диапазон кадра, при указании assemblyId/streamId/streamOffset — SourceMap.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"evidence\": [\n    {\"captureSha256\": \"{{captureSha}}\", \"packetNo\": 1, \"frameOffset\": 0, \"byteLength\": 1}\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Restore Capture snapshot",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/zip"
+              },
+              {
+                "key": "X-Settings-Version-Map",
+                "value": "{}"
+              }
+            ],
+            "url": "{{captureBase}}/internal/v1/projects/{{importedProjectId}}/imports/{{importId}}",
+            "description": "Внутренняя ручка Workspace→Capture. Укажите архив Capture как binary и карту старых/новых settingsVersion в заголовке.",
+            "body": {
+              "mode": "file",
+              "file": {
+                "src": ""
+              }
+            }
+          }
+        },
+        {
+          "name": "Export project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/exports",
+            "description": "Создаёт ws_ job. После SUCCEEDED artifactId скачивается ручкой Download artifact.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Queued', () => pm.response.to.have.status(202));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('jobId', data.jobId);",
+                  "pm.collectionVariables.set('artifactId', data.artifactId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Import project ZIP",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects/import",
+            "description": "Выберите проектный ZIP в file. При повторе задайте тот же importId; проект останется IMPORTING до проверки всех сервисов.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": ""
+                },
+                {
+                  "key": "importId",
+                  "type": "text",
+                  "value": "{{$guid}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Queued', () => pm.response.to.have.status(202));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('importId', data.importId);",
+                  "pm.collectionVariables.set('importedProjectId', data.projectId);",
+                  "pm.collectionVariables.set('jobId', data.jobId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Imported project status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/projects/{{importedProjectId}}",
+            "description": "READY появляется после успешного восстановления Workspace, Capture и Analysis."
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 · Отчёт и файлы",
+      "item": [
+        {
+          "name": "Create Markdown report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{workspaceBase}}/api/v1/projects/{{projectId}}/reports",
+            "description": "runId должен принадлежать завершённому запуску Analysis.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"runId\": \"{{runId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Queued', () => pm.response.to.have.status(202));",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('jobId', data.jobId);",
+                  "pm.collectionVariables.set('artifactId', data.artifactId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Download artifact",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{workspaceBase}}/api/v1/artifacts/{{artifactId}}",
+            "description": "Скачивает только READY ZIP/Markdown; для файла используйте Send and Download."
+          }
+        }
+      ]
+    }
+  ]
+}

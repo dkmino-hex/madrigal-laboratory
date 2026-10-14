@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dkmino-hex/madrigal-laboratory/internal/database"
-	runtimecfg "github.com/dkmino-hex/madrigal-laboratory/internal/service"
-	capture "github.com/dkmino-hex/madrigal-laboratory/services/capture-service/storage"
-	workspace "github.com/dkmino-hex/madrigal-laboratory/services/workspace-service/storage"
+	"github.com/dkmino-hex/madrigal-laboratory/platform/database"
+	runtimecfg "github.com/dkmino-hex/madrigal-laboratory/platform/service"
+	capture "github.com/dkmino-hex/madrigal-laboratory/services/capture-service/migrations"
+	workspace "github.com/dkmino-hex/madrigal-laboratory/services/workspace-service/migrations"
 )
 
 func main() {
@@ -56,9 +56,9 @@ func run(args []string, out io.Writer) error {
 		if *service != "all" && *service != owner {
 			continue
 		}
-		selected, files := *workspacePath, fs.FS(workspace.Migrations)
+		selected, files := *workspacePath, fs.FS(workspace.Files)
 		if owner == "capture" {
-			selected, files = *capturePath, capture.Migrations
+			selected, files = *capturePath, capture.Files
 		}
 		if *path != "" {
 			selected = *path
