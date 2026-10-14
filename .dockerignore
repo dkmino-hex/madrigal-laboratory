@@ -6,3 +6,7 @@ docs
 bin
 dist
 testdata/sample_protocol.tar.zst
+frontend
+.idea
+.vscode
+.DS_Store

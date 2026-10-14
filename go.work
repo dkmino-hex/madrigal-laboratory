@@ -5,4 +5,6 @@ use (
 	./platform
 	./services/capture-service
 	./services/workspace-service
+	./services/analysis-service
+	./services/gateway-service
 )

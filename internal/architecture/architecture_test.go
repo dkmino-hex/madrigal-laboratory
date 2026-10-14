@@ -19,7 +19,7 @@ const module = "github.com/dkmino-hex/madrigal-laboratory/"
 
 func TestServiceDependencyBoundaries(t *testing.T) {
 	root := filepath.Join("..", "..")
-	for _, service := range []string{"capture-service", "workspace-service"} {
+	for _, service := range []string{"capture-service", "workspace-service", "analysis-service", "gateway-service"} {
 		serviceRoot := filepath.Join(root, "services", service)
 		err := filepath.WalkDir(serviceRoot, func(name string, entry fs.DirEntry, err error) error {
 			if err != nil || entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -43,6 +43,9 @@ func TestServiceDependencyBoundaries(t *testing.T) {
 				if strings.HasPrefix(relative, "internal/application/") &&
 					(dependency == "database/sql" || dependency == "net/http" || strings.Contains(dependency, "/internal/adapters/")) {
 					t.Errorf("application %s bypasses its ports: %s", name, dependency)
+				}
+				if strings.HasPrefix(relative, "internal/adapters/inbound/") && strings.Contains(dependency, "/internal/adapters/outbound/") {
+					t.Errorf("inbound adapter %s bypasses application ports: %s", name, dependency)
 				}
 			}
 			return nil

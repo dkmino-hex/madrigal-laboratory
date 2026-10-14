@@ -1,4 +1,4 @@
-name: madrigal
+name: madrigal-integration
 
 services:
   workspace-service:
@@ -47,6 +47,58 @@ services:
     init: true
     stop_grace_period: 20s
 
+  analysis-service:
+    build:
+      context: .
+    command: [analysis]
+    environment:
+      DB_PATH: /data/analysis/analysis.sqlite
+      ANALYSIS_HTTP_ADDR: 0.0.0.0:8083
+      CAPTURE_URL: http://capture-service:8082
+      WORKSPACE_URL: http://workspace-service:8081
+    ports:
+      - "127.0.0.1:8083:8083"
+    volumes:
+      - analysis-data:/data/analysis
+    depends_on:
+      capture-service:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8083/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    init: true
+    stop_grace_period: 20s
+
+  gateway:
+    build:
+      context: .
+    command: [gateway]
+    environment:
+      GATEWAY_HTTP_ADDR: 0.0.0.0:8080
+      ANALYSIS_URL: http://analysis-service:8083
+      WORKSPACE_URL: http://workspace-service:8081
+      CAPTURE_URL: http://capture-service:8082
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      workspace-service:
+        condition: service_healthy
+      capture-service:
+        condition: service_healthy
+      analysis-service:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -O /dev/null http://127.0.0.1:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    init: true
+    stop_grace_period: 20s
+
 volumes:
   capture-files:
   workspace-files:
+  analysis-data:

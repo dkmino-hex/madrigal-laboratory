@@ -8,7 +8,6 @@ import (
 	"strconv"
 
 	"github.com/dkmino-hex/madrigal-laboratory/platform/httpapi"
-	"github.com/dkmino-hex/madrigal-laboratory/services/capture-service/internal/adapters/outbound/filestore"
 	"github.com/dkmino-hex/madrigal-laboratory/services/capture-service/internal/application/captures"
 	"github.com/dkmino-hex/madrigal-laboratory/services/capture-service/internal/domain"
 )
@@ -23,7 +22,7 @@ func captureError(w http.ResponseWriter, err error) {
 		httpapi.Error(w, 400, "INVALID_EVIDENCE", err.Error())
 	case errors.Is(err, sql.ErrNoRows):
 		httpapi.Error(w, 404, "NOT_FOUND", "resource was not found")
-	case errors.Is(err, originals.ErrFormat), errors.Is(err, originals.ErrTooLarge):
+	case errors.Is(err, domain.ErrFormat), errors.Is(err, domain.ErrTooLarge):
 		httpapi.Error(w, 400, "INVALID_CAPTURE", err.Error())
 	default:
 		slog.Error("capture request failed", "error", err)
@@ -50,7 +49,7 @@ func registerCapture(mux *http.ServeMux, store captures.Store) {
 			captureError(w, err)
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, originals.MaxSize+(1<<20))
+		r.Body = http.MaxBytesReader(w, r.Body, domain.MaxCaptureSize+(1<<20))
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
 			httpapi.Error(w, 400, "INVALID_REQUEST", "expected multipart capture upload")
 			return
