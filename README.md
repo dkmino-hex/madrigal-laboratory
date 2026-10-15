@@ -14,6 +14,8 @@ docker compose up --build -d --wait
 
 Начни с [подробного руководства](docs/user-guide.md): загрузка учебных записей и журнала, автоматическое сравнение, наблюдения, создание схемы и независимая проверка. [Сверка с требованиями PDF](docs/requirements-audit.md) отделяет проверенные функции от оставшихся ограничений. [Автоматика](docs/research-automation.md), [формат схемы](docs/analysis-schema.md).
 
+[Понятный просмотр исследования](docs/ux-research.md): связанные список, разбор и байты, расчёт значения, сохранение наблюдения и приёмы Wireshark/TShark.
+
 ```powershell
 ./scripts/check.ps1
 cd frontend

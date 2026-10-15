@@ -27,7 +27,12 @@ import {
 import { Resizer } from '../shared/ui/Resizer';
 import { HexViewer } from '../features/hex-viewer/HexViewer';
 import { SearchPanel } from '../features/hex-viewer/Search';
+import { AssemblyHistory } from '../features/hex-viewer/AssemblyHistory';
 import { SourceInspector } from '../features/source-inspector/SourceInspector';
+import {
+  MessageInspector,
+  useMessageInspection,
+} from '../features/message-inspector/MessageInspector';
 
 export default function Traffic() {
   const project = useProject();
@@ -77,9 +82,25 @@ export default function Traffic() {
   const search = useBufferedParam('q', 'sessionCursor');
   const defects = params.get('defects') ?? '';
   const sessions = useQuery({
-    queryKey: queryKey(projectId, 'sessions', { captureId, cursor: sessionCursor, q, defects }),
+    queryKey: queryKey(projectId, 'sessions', {
+      captureId,
+      cursor: sessionCursor,
+      q,
+      defects,
+      assemblyId: params.get('assemblyId') ?? undefined,
+    }),
     queryFn: ({ signal }) =>
-      api.sessions({ projectId, captureId, cursor: sessionCursor, q, defects }, { signal }),
+      api.sessions(
+        {
+          projectId,
+          captureId,
+          cursor: sessionCursor,
+          q,
+          defects,
+          assemblyId: params.get('assemblyId') ?? undefined,
+        },
+        { signal },
+      ),
     enabled: selectedCapture?.status === 'READY' && !linkError,
     placeholderData: (previous, previousQuery) =>
       previousQuery?.queryKey[3] &&
@@ -258,6 +279,25 @@ export default function Traffic() {
           });
         if (annotations.length >= 64) break;
       }
+  const inspectorTab =
+    params.get('inspector') ??
+    (config.mode === 'mock' ||
+    params.has('returnTo') ||
+    params.has('runId') ||
+    params.has('packetNo')
+      ? 'packets'
+      : 'messages');
+  const inspection = useMessageInspection(
+    windowLocation,
+    selection,
+    inspectorTab === 'messages' && assembly?.status === 'READY' && !linkError,
+    captures.data?.items,
+  );
+  function chooseInspector(value: string) {
+    const next = new URLSearchParams(params);
+    next.set('inspector', value);
+    setParams(next, { replace: true });
+  }
   return (
     <>
       <PageHeading
@@ -268,12 +308,23 @@ export default function Traffic() {
             <Link className="button secondary" to={returnPath}>
               {new URL(returnPath, window.location.origin).pathname.endsWith('/actions')
                 ? 'Вернуться к журналу'
-                : 'Вернуться к результату'}
+                : new URL(returnPath, window.location.origin).pathname.endsWith('/compare')
+                  ? 'Вернуться к сравнению'
+                  : 'Вернуться к результату'}
             </Link>
           )
         }
       />
       {linkError && <ErrorState error={linkError} />}
+      {config.mode === 'api' && captureId && (
+        <AssemblyHistory
+          key={captureId}
+          projectId={projectId}
+          captureId={captureId}
+          assemblyId={assemblyId}
+          direction={direction}
+        />
+      )}
       {config.mode === 'api' && assemblyId && (
         <div className="research-hints">
           <Button disabled={hints.isFetching} onClick={() => setHintsEnabled((value) => !value)}>
@@ -331,7 +382,7 @@ export default function Traffic() {
         {[
           ['list', 'Записи и сессии'],
           ['bytes', 'HEX / ASCII'],
-          ['source', 'Источники'],
+          ['source', 'Сообщения / пакеты'],
         ].map(([value, label]) => (
           <Button key={value} aria-pressed={pane === value} onClick={() => setPane(value!)}>
             {label}
@@ -459,6 +510,9 @@ export default function Traffic() {
                       'direction',
                       'mode',
                       'scenario',
+                      'inspector',
+                      'decodeModel',
+                      'decodeRevision',
                     ]) {
                       const value = params.get(key);
                       if (value !== null) next.set(key, value);
@@ -531,9 +585,18 @@ export default function Traffic() {
                 <select
                   id={id}
                   value={direction}
-                  onChange={(event) =>
-                    setParams({ captureId, sessionId, direction: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const next = new URLSearchParams({
+                      captureId,
+                      sessionId,
+                      direction: event.target.value,
+                    });
+                    for (const key of ['inspector', 'decodeModel', 'decodeRevision']) {
+                      const value = params.get(key);
+                      if (value) next.set(key, value);
+                    }
+                    setParams(next);
+                  }}
                 >
                   <option value="A_TO_B">A → B</option>
                   <option value="B_TO_A">B → A</option>
@@ -674,7 +737,7 @@ export default function Traffic() {
                   (bytes.data.segments.length ? (
                     <HexViewer
                       window={bytes.data}
-                      annotations={annotations}
+                      annotations={[...inspection.annotations, ...annotations]}
                       selection={selection}
                       onSelect={(start, length, windowStart) =>
                         updateSelection(start, length, windowStart ?? false)
@@ -737,11 +800,36 @@ export default function Traffic() {
         />
         <aside className="traffic-source panel">
           {selection && assembly?.status === 'READY' && !linkError ? (
-            <SourceInspector
-              location={selection}
-              runId={params.get('runId') ?? undefined}
-              revisionId={params.get('revisionId') ?? undefined}
-            />
+            <>
+              <div className="inspector-tabs" role="group" aria-label="Режим инспектора">
+                <Button
+                  aria-pressed={inspectorTab === 'messages'}
+                  onClick={() => chooseInspector('messages')}
+                >
+                  Сообщения и поля
+                </Button>
+                <Button
+                  aria-pressed={inspectorTab === 'packets'}
+                  onClick={() => chooseInspector('packets')}
+                >
+                  Исходные пакеты
+                </Button>
+              </div>
+              {inspectorTab === 'messages' ? (
+                <MessageInspector
+                  inspection={inspection}
+                  selection={selection}
+                  onSelect={(start, length) => updateSelection(start, length, true)}
+                  onSources={() => chooseInspector('packets')}
+                />
+              ) : (
+                <SourceInspector
+                  location={selection}
+                  runId={params.get('runId') ?? undefined}
+                  revisionId={params.get('revisionId') ?? undefined}
+                />
+              )}
+            </>
           ) : (
             <Empty title="Источник" description="Выберите готовую сборку и диапазон." />
           )}

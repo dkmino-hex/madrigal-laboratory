@@ -110,10 +110,11 @@ function EditorWorkspace({
   const [desiredRevision, setDesiredRevision] = useState('');
   const [previewAfterSave, setPreviewAfterSave] = useState(false);
   const [previewNotice, setPreviewNotice] = useState('');
+  const [builderInvalid, setBuilderInvalid] = useState(false);
   const previewGeneration = useRef(0);
   const previousProp = useRef(revision?.revisionId);
   const error = syntaxError(draft);
-  const dirty = draft !== savedText;
+  const dirty = draft !== savedText || builderInvalid;
   const save = useCommand(
     'saveRevision',
     (input: { json: string; parentRevisionId?: string }, options) =>
@@ -172,7 +173,7 @@ function EditorWorkspace({
       parsed = value as Record<string, unknown>;
   }
   const problems = error ? {} : schemaProblems(parsed);
-  const hasProblems = Object.keys(problems).length > 0;
+  const hasProblems = Object.keys(problems).length > 0 || builderInvalid;
   function updateBasic(key: string, value: unknown) {
     if (parsed) setDraft(editJsonValue(draft, [key], value));
   }
@@ -279,7 +280,7 @@ function EditorWorkspace({
           Скачать точный JSON ревизии
         </Button>
       </div>
-      <div className="editor-layout">
+      <div className={'editor-layout' + (basic ? '' : ' schema-workspace')}>
         <section className="panel editor-panel">
           <div className="panel-heading">
             <h2>JSON интерпретации</h2>
@@ -307,7 +308,7 @@ function EditorWorkspace({
             />
           </div>
           {error && <Banner tone="error">Синтаксическая ошибка JSON: {error}</Banner>}
-          {hasProblems && (
+          {Object.keys(problems).length > 0 && (
             <Banner tone="error">
               <ul>
                 {Object.entries(problems).map(([path, message]) => (
@@ -452,7 +453,16 @@ function EditorWorkspace({
               </Field>
             </>
           ) : (
-            <SchemaFields draft={draft} parsed={parsed} projectId={projectId} onChange={setDraft} />
+            !error &&
+            parsed && (
+              <SchemaFields
+                draft={draft}
+                parsed={parsed}
+                projectId={projectId}
+                onChange={setDraft}
+                onInvalid={setBuilderInvalid}
+              />
+            )
           )}
           <h3>История ревизий</h3>
           <div className="revision-list">

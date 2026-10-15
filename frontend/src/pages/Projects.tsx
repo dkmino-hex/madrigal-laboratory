@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, FileArchive, Plus } from 'lucide-react';
+import { ArrowUpRight, Plus } from 'lucide-react';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
 import { formatTimestamp } from '../shared/model/precision';
@@ -16,7 +16,7 @@ import {
   Pagination,
   QueryState,
 } from '../shared/ui/common';
-import { UploadWidget } from '../features/projects/Upload';
+import { ImportProjectButton } from '../features/projects/ProjectTransfer';
 import { textError } from '../shared/model/validation';
 import { useBufferedParam } from '../shared/lib/use-buffered-param';
 export default function Projects() {
@@ -50,18 +50,7 @@ export default function Projects() {
           subtitle="От исходных байтов к проверяемой интерпретации."
           actions={
             <>
-              <Modal
-                title="Импортировать проект ZIP"
-                description="Перенос исходных записей, версий и доказательств. Проверку архива выполняет Workspace."
-                trigger={
-                  <Button>
-                    <FileArchive size={16} aria-hidden="true" />
-                    Импортировать ZIP
-                  </Button>
-                }
-              >
-                <UploadWidget kind="project" />
-              </Modal>
+              <ImportProjectButton />
               <Modal
                 title="Новый проект"
                 description="Создайте отдельное пространство для записей и исследовательских гипотез."

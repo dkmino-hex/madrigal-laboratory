@@ -254,7 +254,17 @@ export async function preview(ctx: Context, p: Params) {
   const unknown = await parallel(array(raw.unknownRegions ?? []), (span) =>
     location(ctx, p.projectId, span, at),
   );
-  const errors = array(raw.errors ?? []).map((item) => text(record(item).message));
+  const errors = array(raw.errors ?? []).map((item) => {
+    const error = record(item),
+      code = text(error.code, '');
+    const titles: Record<string, string> = {
+      FIELD_OUT_OF_RANGE: 'Поле выходит за границу сообщения',
+      INCONCLUSIVE: 'Недостаточно известных байтов',
+      FIELD_DECODE: 'Не удалось прочитать поле',
+      LIMIT: 'Достигнут предел разбора',
+    };
+    return (titles[code] || code ? (titles[code] ?? code) + ': ' : '') + text(error.message);
+  });
   return {
     revisionId: p.revisionId,
     location: at,
@@ -373,6 +383,28 @@ export async function createRun(ctx: Context, p: Params) {
   };
 }
 export async function results(ctx: Context, p: Params) {
+  if (p.view === 'checks') {
+    const data = page(
+      await ctx.wire('results', { ...p, ruleId: p.rule, cursor: cursor(p.cursor) }, ctx.options),
+    );
+    return {
+      ...data,
+      items: await parallel(data.items, async (raw) => {
+        const check = record(raw);
+        const at = check.sourceSpan
+          ? await location(ctx, p.projectId, check.sourceSpan)
+          : undefined;
+        return {
+          checkId: JSON.stringify([check.ruleId, check.sourceSpan, check.status, check.message]),
+          rule: text(check.ruleId),
+          status: text(check.status),
+          reason: text(check.message, ''),
+          ...(at ? { location: at } : {}),
+          sources: at ? proof(check.sourceSpan, at) : [],
+        };
+      }),
+    };
+  }
   const data = page(
     await ctx.wire(
       'results',

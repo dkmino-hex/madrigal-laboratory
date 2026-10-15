@@ -1,5 +1,12 @@
 import { it, expect } from 'vitest';
-import { editJsonValue, formatJsonText } from './json-text';
+import {
+  appendJsonValue,
+  editJsonRaw,
+  editJsonValue,
+  formatJsonText,
+  jsonToken,
+  removeJsonValue,
+} from './json-text';
 
 const exact =
   '{ "endian": "little", "extension": 9007199254740993, "fraction": 0.123456789012345678901, "huge": 1e400 }';
@@ -47,4 +54,26 @@ it('форматирование не меняет строки, escapes и пу
 it('некорректный JSON отклоняется до изменения текста', () => {
   expect(() => editJsonValue('{', ['endian'], 'big')).toThrow();
   expect(() => formatJsonText('{')).toThrow();
+});
+it('добавление, удаление и точное значение не округляют соседние числа', () => {
+  let text =
+    '{"fields":[{"name":"x","scale":0.123456789012345678901}],"checks":[{"id":"a","value":18446744073709551615}]}';
+  text = appendJsonValue(text, ['fields'], { name: 'y' });
+  text = editJsonRaw(text, ['fields', 1, 'offset'], '9007199254740993');
+  expect(jsonToken(text, ['fields', 1, 'offset'])).toBe('9007199254740993');
+  text = removeJsonValue(text, ['fields', 0]);
+  expect(JSON.parse(text).fields).toHaveLength(1);
+  expect(text).toContain('18446744073709551615');
+  text = removeJsonValue(text, ['fields', 0, 'offset']);
+  expect(JSON.parse(text).fields[0]).toEqual({ name: 'y' });
+});
+it.each([0, 1, 2])('удаляет элемент массива %s вместе с нужной запятой', (index) => {
+  expect(JSON.parse(removeJsonValue('{"x":[0,1,2]}', ['x', index])).x).toEqual(
+    [0, 1, 2].filter((_, i) => i !== index),
+  );
+});
+it('удаление ключа удаляет также скрытый дубликат', () => {
+  const result = removeJsonValue('{"x":1,"x":2,"y":18446744073709551615}', ['x']);
+  expect(jsonToken(result, ['x'])).toBeUndefined();
+  expect(result).toContain('18446744073709551615');
 });

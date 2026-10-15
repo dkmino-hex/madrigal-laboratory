@@ -2386,6 +2386,11 @@ export interface operations {
                 nextCursor?: string;
               }
             | {
+                items: components['schemas']['Check'][];
+                nextCursor: string;
+                total: string;
+              }
+            | {
                 items: components['schemas']['Field'][];
                 fields: components['schemas']['Field'][];
                 checks: components['schemas']['Check'][];

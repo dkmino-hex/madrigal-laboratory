@@ -103,6 +103,16 @@ export const api = {
         (item) => item.captureId === params.captureId && item.sessionId === params.sessionId,
       ),
     ),
+  assemblyHistory: (params: { projectId: string; captureId: string }, options?: RequestOptions) =>
+    checked(
+      request(
+        'assemblies',
+        { ...params, view: 'history' },
+        z.object({ items: z.array(dto.assemblyVersionSchema) }),
+        options,
+      ),
+      (data) => data.items.every((item) => item.captureId === params.captureId),
+    ),
   bytes: async (location: dto.Location, options?: RequestOptions) => {
     const window = await request('bytes', location, dto.windowSchema, options);
     if (
@@ -329,6 +339,17 @@ export const api = {
           item.location.projectId === params.projectId &&
           item.fields.every((field) => field.location.projectId === params.projectId),
       ),
+    ),
+  checks: (params: Record<string, unknown>, options?: RequestOptions) =>
+    checked(
+      request(
+        'results',
+        { ...params, view: 'checks' },
+        dto.pageSchema(dto.ruleCheckSchema),
+        options,
+      ),
+      (data) =>
+        data.items.every((item) => !item.location || item.location.projectId === params.projectId),
     ),
   job: (projectId: string, jobId: string, options?: RequestOptions) =>
     checked(

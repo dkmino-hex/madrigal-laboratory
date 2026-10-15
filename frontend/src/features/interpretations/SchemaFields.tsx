@@ -1,133 +1,200 @@
-import { useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { editJsonValue } from '../../shared/model/json-text';
-import { Field } from '../../shared/ui/common';
+import { appendJsonValue, editJsonValue, removeJsonValue } from '../../shared/model/json-text';
+import { Banner, Button, Field } from '../../shared/ui/common';
+import { JsonChoice, JsonControl, SchemaContext } from './SchemaControls';
+import { FramingEditor, RulesEditor } from './SchemaStructure';
 
-const object = (value: unknown): Record<string, unknown> | null =>
+export const schemaObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
-    : null;
-
-const typeLabels: Record<string, string> = {
-  int8: 'знаковое число, 1 байт',
-  int16le: 'знаковое число, 2 байта, младший первым',
-  int16be: 'знаковое число, 2 байта, старший первым',
-  int32le: 'знаковое число, 4 байта, младший первым',
-  int32be: 'знаковое число, 4 байта, старший первым',
-  int64le: 'знаковое число, 8 байт, младший первым',
-  int64be: 'знаковое число, 8 байт, старший первым',
-  uint8: 'целое число, 1 байт',
-  u8: 'целое число, 1 байт',
-  uint16le: 'целое число, 2 байта, младший первым',
-  uint16be: 'целое число, 2 байта, старший первым',
-  uint32le: 'целое число, 4 байта, младший первым',
-  uint32be: 'целое число, 4 байта, старший первым',
-  uint64le: 'целое число, 8 байт, младший первым',
-  uint64be: 'целое число, 8 байт, старший первым',
-  float32le: 'дробное число, 4 байта, младший первым',
-  float32be: 'дробное число, 4 байта, старший первым',
-  ascii: 'текст ASCII',
-  utf8: 'текст UTF-8',
-  hex: 'байты в шестнадцатеричной записи',
-  bytes: 'исходные байты',
-};
+    : {};
+const fieldTypes = [
+  ['uint8', 'Целое без знака · 1 байт'],
+  ['int8', 'Целое со знаком · 1 байт'],
+  ...[16, 32, 64].flatMap((bits) =>
+    ['uint', 'int'].flatMap((prefix) =>
+      ['le', 'be'].map((order) => [
+        prefix + bits + order,
+        `${prefix === 'int' ? 'Со знаком' : 'Без знака'} · ${bits / 8} байт · ${order === 'le' ? 'младший первым' : 'старший первым'}`,
+      ]),
+    ),
+  ),
+  ['float32le', 'Дробное IEEE 754 · 4 байта · младший первым'],
+  ['float32be', 'Дробное IEEE 754 · 4 байта · старший первым'],
+  ['ascii', 'Текст ASCII'],
+  ['utf8', 'Текст UTF-8'],
+  ['hex', 'Байты HEX'],
+  ['bytes', 'Байты'],
+  ['base64', 'Байты Base64'],
+].map(([value, label]) => ({ value: value!, label: label! }));
 
 export function SchemaFields({
   draft,
   parsed,
   projectId,
   onChange,
+  onInvalid,
 }: {
   draft: string;
   parsed: Record<string, unknown> | null;
   projectId: string;
   onChange: (draft: string) => void;
+  onInvalid?: (invalid: boolean) => void;
 }) {
-  const fields: unknown[] = Array.isArray(parsed?.fields) ? parsed.fields : [];
-  const framing = object(parsed?.framing);
+  const fields = (Array.isArray(parsed?.fields) ? parsed.fields : []).map(schemaObject);
+  const checks = (Array.isArray(parsed?.checks) ? parsed.checks : []).map(schemaObject);
+  const [problems, setProblems] = useState<Record<string, string>>({});
+  const problem = useCallback(
+    (key: string, value?: string) =>
+      setProblems((previous) => {
+        if (previous[key] === value) return previous;
+        const next = { ...previous };
+        if (value) next[key] = value;
+        else delete next[key];
+        return next;
+      }),
+    [],
+  );
+  const invalid = Object.keys(problems).length > 0;
+  useEffect(() => {
+    onInvalid?.(invalid);
+    return () => onInvalid?.(false);
+  }, [invalid, onInvalid]);
   const pendingRenames = useRef(new Map<number, string>());
   function rename(index: number, name: string) {
-    const current = object(fields[index])?.name;
+    const current = fields[index]?.name;
     const previous = current === '' ? pendingRenames.current.get(index) : current;
     let next = editJsonValue(draft, ['fields', index, 'name'], name);
-    if (name === '' && typeof previous === 'string' && previous !== '') {
+    if (name === '' && typeof previous === 'string' && previous !== '')
       pendingRenames.current.set(index, previous);
-    } else if (typeof previous === 'string' && previous !== '') {
+    else if (typeof previous === 'string' && previous !== '') {
       pendingRenames.current.delete(index);
       fields.forEach((field, otherIndex) => {
-        if (object(field)?.lengthFrom === previous)
+        if (field.lengthFrom === previous)
           next = editJsonValue(next, ['fields', otherIndex, 'lengthFrom'], name);
       });
-      if (Array.isArray(parsed?.checks))
-        parsed.checks.forEach((check, checkIndex) => {
-          if (object(check)?.field === previous)
-            next = editJsonValue(next, ['checks', checkIndex, 'field'], name);
-        });
+      checks.forEach((check, index) => {
+        if (check.field === previous) next = editJsonValue(next, ['checks', index, 'field'], name);
+      });
     }
     onChange(next);
   }
   return (
-    <div className="schema-fields">
-      <h2>Поля сообщения</h2>
-      <p>
-        Ниже показаны поля, заданные в JSON слева. Имя можно изменить здесь. Положение, тип,
-        добавление полей и правила пока редактируются в JSON.
-      </p>
-      {framing?.fixedLength ? (
+    <SchemaContext.Provider value={{ draft, change: onChange, problem }}>
+      <div className="schema-fields">
+        <FramingEditor parsed={parsed} />
+        <h2>Поля сообщения</h2>
         <p>
-          Заданный размер сообщения: <strong>{String(framing.fixedLength)} байт</strong>.
+          Опиши, как читать байты внутри одного сообщения. Масштаб умножает прочитанное число:
+          например 2150 × 0.01 = 21.5.
         </p>
-      ) : null}
-      {fields.map((value, index) => {
-        const field = object(value);
-        if (!field) return null;
-        const name = typeof field.name === 'string' ? field.name : '';
-        const duplicate = fields.some(
-          (other, otherIndex) => otherIndex !== index && object(other)?.name === name,
-        );
-        return (
-          <div className="schema-field" key={index}>
-            <Field
-              label={'Название поля ' + (index + 1)}
-              hint="Это рабочее имя в схеме. Его смысл нужно подтвердить примерами."
-              error={
-                !name.trim()
-                  ? 'Задай непустое имя поля.'
-                  : duplicate
-                    ? 'Имя уже используется другим полем.'
-                    : undefined
-              }
-            >
-              {(id) => (
-                <input
-                  id={id}
-                  value={name}
-                  maxLength={120}
-                  onChange={(event) => rename(index, event.target.value)}
+        {fields.map((field, index) => {
+          const path = ['fields', index];
+          const name = String(field.name ?? '');
+          const referenced =
+            fields.some((other) => other.lengthFrom === name) ||
+            checks.some((check) => check.field === name);
+          return (
+            <details className="schema-field" key={index} open>
+              <summary>
+                Поле {index + 1} · {name || 'Без имени'}
+              </summary>
+              <div className="schema-controls">
+                <Field
+                  label={'Название поля ' + (index + 1)}
+                  hint="Рабочее имя в схеме. Правила и длины связанных полей переименуются вместе с ним."
+                >
+                  {(id) => (
+                    <input
+                      id={id}
+                      value={name}
+                      onChange={(event) => rename(index, event.target.value)}
+                    />
+                  )}
+                </Field>
+                <JsonChoice
+                  path={[...path, 'type']}
+                  label={'Тип поля ' + (index + 1)}
+                  options={fieldTypes}
                 />
-              )}
-            </Field>
-            <p>
-              <code>{String(field.type ?? 'Тип не задан')}</code>
-              {typeLabels[String(field.type)] ? ' — ' + typeLabels[String(field.type)] : ''}
-            </p>
-            <p className="muted">
-              {field.scale !== undefined
-                ? 'Масштаб: прочитанное число × ' + String(field.scale) + '. '
-                : ''}
-              {field.offset === undefined
-                ? index === 0
-                  ? 'Начинается с первого байта сообщения.'
-                  : 'Начинается сразу после предыдущего поля.'
-                : 'Начинается с позиции ' + String(field.offset) + ' внутри сообщения; отсчёт с 0.'}
-              {field.length ? ' Длина: ' + String(field.length) + ' байт.' : ''}
-              {field.lengthFrom ? ' Длина берётся из поля ' + String(field.lengthFrom) + '.' : ''}
-            </p>
-          </div>
-        );
-      })}
-      {!fields.length && <p>Поля ещё не заданы. Добавь массив fields в JSON схемы.</p>}
-      <Link to={'/projects/' + projectId + '/guide#fields'}>Пример поля и объяснение типов →</Link>
-    </div>
+                <JsonControl
+                  path={[...path, 'description']}
+                  label={'Пояснение поля ' + (index + 1)}
+                  optional
+                  hint="Показывается рядом со значением в просмотре сообщений."
+                />
+                <JsonControl
+                  path={[...path, 'offset']}
+                  label={'Позиция поля ' + (index + 1)}
+                  kind="uint"
+                  optional
+                  maximum={1048576n}
+                  hint="От начала сообщения, с 0. Пусто — сразу после предыдущего поля."
+                />
+                <JsonControl
+                  path={[...path, 'length']}
+                  label={'Длина поля ' + (index + 1)}
+                  kind="uint"
+                  optional
+                  maximum={1048576n}
+                  hint="Для текста и байтов. Числовой тип уже задаёт свой размер."
+                />
+                <JsonChoice
+                  path={[...path, 'lengthFrom']}
+                  label={'Длина из другого поля ' + (index + 1)}
+                  empty="Задана выше / остаток сообщения"
+                  options={fields.slice(0, index).map((item) => ({
+                    value: String(item.name ?? ''),
+                    label: String(item.name ?? ''),
+                  }))}
+                />
+                <JsonControl
+                  path={[...path, 'scale']}
+                  label={'Масштаб поля ' + (index + 1)}
+                  kind="number"
+                  nonzero
+                  optional
+                  hint="Только для чисел. Пусто — без пересчёта; 0.01 означает деление на 100."
+                />
+                <Button
+                  variant="ghost"
+                  disabled={referenced}
+                  onClick={() => {
+                    pendingRenames.current.clear();
+                    onChange(removeJsonValue(draft, path));
+                  }}
+                >
+                  Удалить поле {index + 1}
+                </Button>
+                {referenced && (
+                  <p className="muted">
+                    Сначала удали использующие это поле правила или ссылки на его длину.
+                  </p>
+                )}
+              </div>
+            </details>
+          );
+        })}
+        <Button
+          onClick={() => {
+            let index = fields.length + 1;
+            while (fields.some((field) => field.name === 'field_' + index)) index++;
+            onChange(appendJsonValue(draft, ['fields'], { name: 'field_' + index, type: 'uint8' }));
+          }}
+        >
+          Добавить поле
+        </Button>
+        <RulesEditor fields={fields} checks={checks} />
+        {invalid && (
+          <Banner tone="error">
+            Исправь значения в форме перед сохранением или предварительным разбором.
+          </Banner>
+        )}
+        <Link to={'/projects/' + projectId + '/guide#fields'}>
+          Пример поля и объяснение типов →
+        </Link>
+      </div>
+    </SchemaContext.Provider>
   );
 }

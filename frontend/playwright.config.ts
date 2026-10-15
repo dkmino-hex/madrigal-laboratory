@@ -14,6 +14,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     ...devices['Desktop Chrome'],
+    channel: process.env.MADRIGAL_BROWSER_CHANNEL,
     viewport: { width: 1440, height: 900 },
   },
   webServer: {

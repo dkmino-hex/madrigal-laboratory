@@ -302,6 +302,7 @@ test('автоматическое исследование: реальные б
           passed: run.summary.rules.PASS,
           counterexamples: failed.summary.rules.FAIL,
           correctedRevisionId: corrected.revisionId,
+          interpretationId: model.interpretationId,
           additionalCaptureId: captures[3],
           seconds: (performance.now() - started) / 1000,
         };
@@ -316,23 +317,93 @@ test('автоматическое исследование: реальные б
     { files, journal, gateway },
   );
   console.log('AUTOMATIC RESEARCH', JSON.stringify(data));
-  await page.goto(`${gateway}/projects/${data.projectId}/compare`);
-  await expect(page.getByRole('heading', { name: 'Кандидаты и наблюдения' })).toBeVisible({
+  await page.goto(`${gateway}/projects/${data.projectId}`);
+  await page.getByRole('link', { name: 'Сравнить значения', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Примеры: журнал и найденное значение' }),
+  ).toBeVisible({
     timeout: 30000,
   });
-  await page.getByLabel('Группа примеров').selectOption(data.groupId);
-  await page.getByLabel('Сопоставить со значением журнала').selectOption(data.parameter);
-  await expect(page.locator('.research-matrix [data-candidate="true"]').first()).toBeVisible();
+  await page.getByLabel('Какие примеры сравниваем').selectOption(data.groupId);
+  await page.getByLabel('Что ищем в сообщениях').selectOption(data.parameter);
+  await page.goto(
+    `${gateway}/projects/${data.projectId}/compare?parameter=` +
+      encodeURIComponent('observed.measurements[0].device_time_ms'),
+  );
+  await expect(page.locator('.research-finding h2')).toContainText('Время устройства, мс');
+  await expect(page.locator('.research-inspector .research-reading-values strong')).toContainText(
+    'мс',
+  );
+  await page
+    .locator('.research-inspector')
+    .screenshot({ path: 'test-results/research/time-example.png' });
+  await page.getByLabel('Что ищем в сообщениях').selectOption(data.parameter);
+  await expect(page.getByRole('region', { name: 'Сравнение байтов примеров' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Кандидаты в поля' })).toBeVisible();
+  await expect
+    .poll(() =>
+      page.locator('.compact-byte-matrix').evaluate((body) => {
+        const cell = body.querySelector<HTMLElement>('thead [data-candidate="true"]')!;
+        const pinned = body.querySelector<HTMLElement>('thead th:nth-child(3)')!;
+        return (
+          cell.getBoundingClientRect().left >= pinned.getBoundingClientRect().right - 1 &&
+          cell.getBoundingClientRect().right <= body.getBoundingClientRect().right
+        );
+      }),
+    )
+    .toBe(true);
+  await page.screenshot({ path: 'test-results/research/compare-bytes.png', fullPage: true });
+  await page.getByRole('button', { name: 'Значения', exact: true }).click();
+  const inspector = page.getByRole('region', { name: 'Разбор выбранного примера' });
+  await expect(inspector.locator('.research-calculation')).toContainText('÷ 100');
+  const firstExample = page.locator('.research-example-pick').first();
+  await firstExample.click();
+  await firstExample.press('ArrowDown');
+  await expect(page.locator('.research-example-pick').nth(1)).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  const selectedExample = new URL(page.url()).searchParams.get('example');
+  await inspector.getByRole('link', { name: 'Открыть исходные пакеты →' }).click();
+  await expect(page.getByRole('grid')).toBeVisible();
+  await page.getByRole('link', { name: 'Вернуться к сравнению' }).click();
+  await expect(page.getByLabel('Что ищем в сообщениях')).toHaveValue(data.parameter);
+  await expect.poll(() => new URL(page.url()).searchParams.get('example')).toBe(selectedExample);
   await page
     .locator('.research-candidate')
+    .filter({ hasText: 'Целое без знака' })
     .first()
-    .getByRole('button', { name: 'Создать наблюдение', exact: true })
+    .locator('.research-candidate-pick')
     .click();
+  await page.getByRole('button', { name: /^Только отличающиеся/ }).click();
+  await expect(page.locator('.research-example-table tbody tr').first()).toHaveAttribute(
+    'data-example-status',
+    'counterexample',
+  );
+  await page.getByRole('button', { name: 'Показать все примеры' }).click();
+  await page
+    .locator('.research-candidate')
+    .filter({ hasText: 'Целое со знаком' })
+    .first()
+    .locator('.research-candidate-pick')
+    .click();
+  await page.getByText(/Полная матрица байтов ·/).click();
+  await expect(page.locator('.research-matrix [data-candidate="true"]').first()).toBeVisible();
+  await page.getByText(/Полная матрица байтов ·/).click();
+  await page.getByRole('button', { name: 'Сохранить наблюдение', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Наблюдение из данных' });
-  await expect(dialog.getByLabel('Автоматическая формулировка')).not.toHaveValue('');
+  await expect(dialog.getByLabel('Что удалось заметить')).toHaveValue(/Температурный порог/);
+  await expect(dialog.locator('.research-reading')).toContainText('°C');
+  await expect(
+    dialog.getByRole('button', { name: 'Сохранить наблюдение с источниками' }),
+  ).toBeInViewport();
+  await dialog.screenshot({ path: 'test-results/research/observation.png' });
   await dialog.getByRole('button', { name: 'Сохранить наблюдение с источниками' }).click();
   await expect(dialog.getByText(/Запись сохранена с/)).toBeVisible();
   await page.getByRole('button', { name: 'Закрыть диалог' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Сохранить наблюдение', exact: true }),
+  ).toBeFocused();
   await page.screenshot({ path: 'test-results/research/compare.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -341,7 +412,7 @@ test('автоматическое исследование: реальные б
   await page.getByRole('button', { name: 'Переключить тему' }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.screenshot({ path: 'test-results/research/compare-dark.png', fullPage: true });
-  await page.getByRole('button', { name: 'Создать схему из кандидата', exact: true }).click();
+  await page.getByRole('button', { name: 'Создать схему для проверки', exact: true }).click();
   await page.getByRole('link', { name: 'Открыть спецификацию →' }).click();
   await expect(page).toHaveURL(/source=/);
   const previewResponse = page.waitForResponse(
@@ -354,15 +425,51 @@ test('автоматическое исследование: реальные б
     true,
   );
   await page.goto(
-    `${gateway}/projects/${data.projectId}/traffic?` + new URLSearchParams(data.source),
+    `${gateway}/projects/${data.projectId}/traffic?` +
+      new URLSearchParams({
+        ...data.source,
+        inspector: 'messages',
+        decodeModel: data.interpretationId,
+        decodeRevision: data.correctedRevisionId,
+      }),
   );
   await expect(page.getByRole('grid')).toBeVisible();
+  const messages = page.getByRole('region', { name: 'Сообщения и поля', exact: true });
+  await expect(messages.locator('.message-pick').first()).toBeVisible();
+  await expect(messages.locator('.message-field').first()).toBeVisible();
+  const firstField = messages.locator('.message-field').first();
+  await firstField.click();
+  await expect(firstField).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.hex-byte.selected[data-field-color]').first()).toBeVisible();
+  const fieldStart = new URL(page.url()).searchParams.get('start');
+  await page.locator(`.hex-byte[data-offset="${BigInt(fieldStart!) + 1n}"]`).click();
+  await expect(firstField).toHaveAttribute('aria-pressed', 'true');
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get('start'))
+    .toBe(String(BigInt(fieldStart!) + 1n));
+  await firstField.click();
+  await page.reload();
+  await expect.poll(() => new URL(page.url()).searchParams.get('start')).toBe(fieldStart);
+  await expect(messages.locator('.message-field[aria-pressed="true"]').first()).toBeVisible();
+  await page.screenshot({ path: 'test-results/research/messages.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Сообщения / пакеты', exact: true }).click();
+  await expect(messages.locator('.message-field').first()).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/research/messages-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await messages.getByLabel('Разбирать по схеме').selectOption('auto');
+  await expect(
+    messages.getByText('Названия взяты из журнала. Найденные поля — гипотезы.'),
+  ).toBeVisible();
+  await expect(messages.locator('.message-field').first()).toContainText('Гипотеза');
+  await page.getByRole('button', { name: 'Исходные пакеты', exact: true }).click();
   await page.getByRole('button', { name: 'Подсветить кандидаты в поля' }).click();
   await expect(page.locator('.hex-byte[data-candidate="true"]').first()).toBeVisible({
     timeout: 30000,
   });
   await page.getByRole('button', { name: 'Создать наблюдение из выделения' }).click();
-  await expect(dialog.getByLabel('Автоматическая формулировка')).toHaveValue(/известны .* байт/);
+  await expect(dialog.getByLabel('Что удалось заметить')).toHaveValue(/известны .* байт/);
   await page.getByRole('button', { name: 'Закрыть диалог' }).click();
   await mkdir('test-results/research', { recursive: true });
   await writeFile('test-results/research/last-run.json', JSON.stringify(data, null, 2));

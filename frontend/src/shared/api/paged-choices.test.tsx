@@ -175,3 +175,37 @@ it('направление без сборки на первой страниц�
   expect(result.current.resolving).toBe(false);
   expect(cursors).toEqual(['0', 'next']);
 });
+
+it('готовый архив экспорта находится за первой страницей по закреплённому artifactId', async () => {
+  const cursors: string[] = [];
+  const { result } = renderHook(
+    () =>
+      usePagedChoices(
+        'project',
+        'artifacts',
+        async (cursor) => {
+          cursors.push(cursor);
+          return {
+            items: [
+              {
+                artifactId: cursor === '0' ? 'old-export' : 'current-export',
+                jobId: cursor === '0' ? 'old-job' : 'export-job',
+              },
+            ],
+            nextCursor: cursor === '0' ? 'next' : null,
+          };
+        },
+        { exportJobId: 'export-job' },
+        true,
+        'current-export',
+      ),
+    { wrapper: wrapper() },
+  );
+  await waitFor(() =>
+    expect(
+      result.current.data?.items.find((item) => item.artifactId === 'current-export')?.jobId,
+    ).toBe('export-job'),
+  );
+  expect(result.current.resolving).toBe(false);
+  expect(cursors).toEqual(['0', 'next']);
+});

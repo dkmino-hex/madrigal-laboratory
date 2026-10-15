@@ -19,6 +19,8 @@ import { RunManifest, RunSummary } from '../features/runs/Summary';
 import { ResultsTable } from '../features/interpretations/Results';
 import { JobCard, trackJob } from '../features/jobs/Jobs';
 import { useBufferedParam } from '../shared/lib/use-buffered-param';
+import { ChecksTable } from '../features/runs/ChecksTable';
+import { ResultsExport } from '../features/runs/ResultsExport';
 export default function RunDetail() {
   const projectId = useProject().projectId;
   const runId = useParams().runId!;
@@ -28,6 +30,11 @@ export default function RunDetail() {
   const rule = params.get('rule') ?? '';
   const ruleSearch = useBufferedParam('rule');
   const captureId = params.get('captureId') ?? '';
+  const q = params.get('q') ?? '';
+  const search = useBufferedParam('q');
+  const source = params.get('source') ?? '';
+  const streamSearch = useBufferedParam('source');
+  const checkView = params.get('view') === 'checks';
   const cursor = params.get('cursor') ?? '0';
   const query = useQuery({
     queryKey: queryKey(projectId, 'run', { runId }),
@@ -41,11 +48,36 @@ export default function RunDetail() {
         : 600,
   });
   const results = useQuery({
-    queryKey: queryKey(projectId, 'results', { runId, status, rule, captureId, cursor }),
+    queryKey: queryKey(projectId, 'results', {
+      runId,
+      status,
+      rule,
+      captureId,
+      q,
+      source,
+      cursor,
+      view: 'messages',
+    }),
     queryFn: ({ signal }) =>
-      api.results({ projectId, runId, status, rule, captureId, cursor }, { signal }),
-    enabled: !!query.data,
+      api.results({ projectId, runId, status, rule, captureId, q, source, cursor }, { signal }),
+    enabled: !!query.data && !checkView,
   });
+  const checks = useQuery({
+    queryKey: queryKey(projectId, 'results', {
+      runId,
+      status,
+      rule,
+      captureId,
+      q,
+      source,
+      cursor,
+      view: 'checks',
+    }),
+    queryFn: ({ signal }) =>
+      api.checks({ projectId, runId, status, rule, captureId, q, source, cursor }, { signal }),
+    enabled: !!query.data && checkView,
+  });
+  const current = checkView ? checks : results;
   const run = query.data;
   const resultVersion = run ? JSON.stringify([run.status, run.summary]) : '';
   useEffect(() => {
@@ -131,9 +163,54 @@ export default function RunDetail() {
           <section className="panel">
             <div className="panel-heading">
               <h2>Результаты и контрпримеры</h2>
+              <ResultsExport
+                params={{ projectId, runId, status, rule, captureId, q, source }}
+                checks={checkView}
+                enabled={run.status === 'COMPLETED'}
+              />
               {!run.summary.complete && <span className="draft-badge dirty">Частичные данные</span>}
             </div>
             <div className="form-grid">
+              <Field label="Показать результаты">
+                {(id) => (
+                  <select
+                    id={id}
+                    value={checkView ? 'checks' : 'messages'}
+                    onChange={(event) => filter('view', event.target.value)}
+                  >
+                    <option value="messages">По сообщениям</option>
+                    <option value="checks">Каждое правило отдельно</option>
+                  </select>
+                )}
+              </Field>
+              <Field
+                label="Поиск в результатах"
+                hint={
+                  checkView
+                    ? 'По имени правила и объяснению результата.'
+                    : 'По названиям полей и прочитанным значениям.'
+                }
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    value={search.value}
+                    onChange={(event) => search.setValue(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field
+                label="Поток"
+                hint="Вставь streamId из источника или нажми «Только этот поток» у проверки. Пусто — все потоки."
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    value={streamSearch.value}
+                    onChange={(event) => streamSearch.setValue(event.target.value)}
+                  />
+                )}
+              </Field>
               <Field label="Статус проверки">
                 {(id) => (
                   <select
@@ -173,11 +250,18 @@ export default function RunDetail() {
               </Field>
             </div>
             <QueryState
-              pending={results.isPending}
-              error={results.error}
-              retry={() => void results.refetch()}
+              pending={current.isPending}
+              error={current.error}
+              retry={() => void current.refetch()}
             >
-              {results.data?.items.length ? (
+              {checkView && checks.data?.items.length ? (
+                <ChecksTable
+                  checks={checks.data.items}
+                  runId={runId}
+                  revisionId={run.manifest.revisionId}
+                  onStream={(stream) => filter('source', stream)}
+                />
+              ) : !checkView && results.data?.items.length ? (
                 <ResultsTable
                   results={results.data.items}
                   runId={runId}
@@ -189,11 +273,11 @@ export default function RunDetail() {
                   description="Ноль результатов не подтверждает выполнение правил."
                 />
               )}
-              {results.data && (
+              {current.data && (
                 <Pagination
                   cursor={cursor}
-                  total={results.data.total}
-                  nextCursor={results.data.nextCursor}
+                  total={current.data.total}
+                  nextCursor={current.data.nextCursor}
                   onChange={(value) => filter('cursor', value)}
                 />
               )}

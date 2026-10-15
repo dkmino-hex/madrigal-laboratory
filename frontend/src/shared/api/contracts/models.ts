@@ -62,6 +62,17 @@ export const locationSchema = z.object({
   start: d,
   length: d,
 });
+export const assemblyVersionSchema = z.object({
+  assemblyId: id,
+  captureId: id,
+  settingsVersion: id,
+  settings: z.string(),
+  engineVersion: z.string(),
+  status: z.enum(['READY', 'BUILDING', 'ERROR']),
+  diagnostics: z.array(z.string()),
+  createdAt: timestampSchema,
+  finishedAt: timestampSchema.optional(),
+});
 export const sourceSchema = z.object({
   captureId: id,
   packetNo: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
@@ -200,6 +211,14 @@ export const resultSchema = z.object({
   fields: z.array(fieldSchema),
   sources: z.array(sourceSchema),
 });
+export const ruleCheckSchema = z.object({
+  checkId: z.string(),
+  rule: z.string(),
+  status: checkStatus,
+  reason: z.string(),
+  location: locationSchema.optional(),
+  sources: z.array(sourceSchema),
+});
 export const previewSchema = z.object({
   revisionId: id,
   location: locationSchema,
@@ -292,6 +311,7 @@ export type Hypothesis = z.infer<typeof hypothesisSchema>;
 export type Interpretation = z.infer<typeof interpretationSchema>;
 export type Revision = z.infer<typeof revisionSchema>;
 export type Result = z.infer<typeof resultSchema>;
+export type RuleCheck = z.infer<typeof ruleCheckSchema>;
 export type FieldResult = z.infer<typeof fieldSchema>;
 export type Preview = z.infer<typeof previewSchema>;
 export type Run = z.infer<typeof runSchema>;

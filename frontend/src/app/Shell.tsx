@@ -26,6 +26,7 @@ import { config } from './config';
 import { readPreference, savePreference } from '../shared/lib/storage';
 import { DevelopmentTools } from './DevelopmentTools';
 import { ThemeContext } from './theme';
+import { ProjectTransferActions } from '../features/projects/ProjectTransfer';
 
 export function Shell() {
   const [theme, setTheme] = useState(readPreference('theme') ?? 'system');
@@ -161,6 +162,13 @@ export function ProjectLayout() {
         </div>
       </aside>
       <main id="main" className="main-content">
+        {project && (
+          <ProjectTransferActions
+            key={projectId}
+            projectId={projectId}
+            ready={project.status === 'READY'}
+          />
+        )}
         {project?.status === 'READY' && (
           <nav className="research-workflow" aria-label="Этапы исследования">
             {[

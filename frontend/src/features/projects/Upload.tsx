@@ -1,13 +1,26 @@
 import { useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Upload } from 'lucide-react';
 import { api } from '../../shared/api/client';
 import { queryKey } from '../../shared/api/query';
 import { createRequestKey, logicalRequest } from '../../shared/api/transport';
 import { Banner, Button, ErrorState, Field } from '../../shared/ui/common';
-import { trackJob, JobCard } from '../jobs/Jobs';
+import { trackJob, JobCard, jobQuery } from '../jobs/Jobs';
 import { fileError, timeOffsetInput, timeZoneError } from '../../shared/model/validation';
 import { TimeZoneSelect } from '../../shared/ui/TimeZoneSelect';
+function ImportedProject({ projectId, jobId }: { projectId: string; jobId: string }) {
+  const job = useQuery(jobQuery(projectId, jobId));
+  if (job.data?.status !== 'COMPLETED') return null;
+  return (
+    <Banner tone="success">
+      Проект восстановлен как отдельная копия.{' '}
+      <Link className="button primary" to={'/projects/' + projectId}>
+        Открыть импортированный проект
+      </Link>
+    </Banner>
+  );
+}
 export function UploadWidget({
   kind,
   projectId,
@@ -90,7 +103,7 @@ export function UploadWidget({
         error={uploadProblem}
         hint={
           kind === 'project'
-            ? 'Версию, хеши и ссылки проверяет Workspace. Незавершённый импорт не готов для исследования.'
+            ? 'Архив проекта Мадригал. После проверки появится кнопка открытия восстановленной копии.'
             : 'Передача и обработка — отдельные этапы. Файл передаётся без base64.'
         }
       >
@@ -172,6 +185,7 @@ export function UploadWidget({
       {notice && <Banner tone={notice.includes('Частичный') ? 'warning' : 'info'}>{notice}</Banner>}
       {mutation.error && <ErrorState error={mutation.error} />}
       {job && <JobCard {...job} />}
+      {kind === 'project' && job && <ImportedProject {...job} />}
     </div>
   );
 }

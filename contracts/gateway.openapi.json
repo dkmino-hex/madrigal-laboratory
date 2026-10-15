@@ -3,7 +3,7 @@
   "info": {
     "title": "Madrigal public Gateway API",
     "version": "1.0.0",
-    "description": "Native HTTP contracts for four independent service modules. Internal service routes are excluded. Decimal strings preserve offsets and analysis field values. Results view=messages preserves message grouping; omitted view retains the legacy flattened response."
+    "description": "Native HTTP contracts for four independent service modules. Internal service routes are excluded. Decimal strings preserve offsets and analysis field values. Results view=messages preserves message grouping; view=checks filters and paginates individual checks; omitted view retains the legacy flattened response."
   },
   "servers": [
     {
@@ -2451,7 +2451,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "oneOf": [
+                  "anyOf": [
                     {
                       "type": "object",
                       "properties": {
@@ -2466,6 +2466,18 @@
                         }
                       },
                       "required": ["items"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/Check" }
+                        },
+                        "nextCursor": { "type": "string" },
+                        "total": { "type": "string" }
+                      },
+                      "required": ["items", "nextCursor", "total"]
                     },
                     {
                       "type": "object",

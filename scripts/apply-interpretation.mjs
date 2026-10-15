@@ -11,6 +11,7 @@ const { values } = parseArgs({
     project: { type: "string" },
     revision: { type: "string" },
     capture: { type: "string", multiple: true },
+    assembly: { type: "string", multiple: true },
     out: { type: "string" },
     "timeout-seconds": { type: "string", default: "600" },
     help: { type: "boolean" },
@@ -18,7 +19,7 @@ const { values } = parseArgs({
 });
 if (values.help) {
   console.log(
-    "node scripts/apply-interpretation.mjs --project ID --revision ID --capture ID [--capture ID] [--gateway URL] [--out NEW_DIRECTORY] [--timeout-seconds 600]",
+    "node scripts/apply-interpretation.mjs --project ID --revision ID --capture ID [--capture ID] [--assembly ID (one per capture, same order)] [--gateway URL] [--out NEW_DIRECTORY] [--timeout-seconds 600]",
   );
   process.exit(0);
 }
@@ -33,6 +34,8 @@ if (
   );
 if (new Set(values.capture).size !== values.capture.length)
   throw new Error("Duplicate capture.");
+if (values.assembly && values.assembly.length !== values.capture.length)
+  throw new Error("Provide exactly one --assembly per --capture, in the same order.");
 const seconds = Number(values["timeout-seconds"]);
 if (!Number.isFinite(seconds) || seconds < 5 || seconds > 600)
   throw new Error("timeout-seconds must be 5–600.");
@@ -65,11 +68,13 @@ async function request(path, body) {
 const projectPath = "/api/v1/projects/" + encodeURIComponent(values.project);
 const corpus = [];
 let settingsVersion;
-for (const captureId of values.capture) {
+for (const [index, captureId] of values.capture.entries()) {
   const page = await request(
     `${projectPath}/captures/${encodeURIComponent(captureId)}/assemblies`,
   );
-  const assembly = page.items.find((item) => item.status === "READY");
+  const assembly = values.assembly
+    ? page.items.find((item) => item.assemblyId === values.assembly[index] && item.status === "READY")
+    : [...page.items].reverse().find((item) => item.status === "READY");
   if (!assembly) throw new Error(`No READY assembly for ${captureId}.`);
   settingsVersion ??= assembly.settingsVersion;
   if (settingsVersion !== assembly.settingsVersion)

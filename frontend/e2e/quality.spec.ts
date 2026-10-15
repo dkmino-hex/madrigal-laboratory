@@ -45,7 +45,7 @@ test('AT-28 клавиатура, фокус диалога, системная 
   expect(await page.locator('.hex-header').evaluate((element) => element.scrollLeft)).toBe(
     horizontal,
   );
-  await page.getByRole('button', { name: 'Источники', exact: true }).click();
+  await page.getByRole('button', { name: 'Сообщения / пакеты', exact: true }).click();
   await expect(page.getByText('Кадр №7', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Открыть навигацию' }).click();
   await expect(page.getByRole('link', { name: 'Интерпретации', exact: true })).toBeVisible();
@@ -234,7 +234,7 @@ for (const theme of ['light', 'dark'] as const) {
         fullPage: true,
       });
       if (width === 390) {
-        await page.getByRole('button', { name: 'Источники', exact: true }).click();
+        await page.getByRole('button', { name: 'Сообщения / пакеты', exact: true }).click();
         await page.screenshot({
           path: 'docs/frontend/screenshots/' + theme + '-390-source.png',
           fullPage: true,

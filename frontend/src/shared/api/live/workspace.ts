@@ -1,6 +1,8 @@
 import { config, gatewayUrl } from '../../../app/config';
 import { shiftTimestamp } from '../../model/precision';
 import { ApiError } from '../errors';
+import { locationSchema } from '../contracts/models';
+import { sources } from './capture';
 import {
   array,
   cursor,
@@ -109,12 +111,21 @@ export async function importActions(ctx: Context, p: Params) {
   return { job: await readJob(ctx, p.projectId, raw.jobId) };
 }
 export async function saveEvidence(ctx: Context, p: Params) {
-  const location = record(p.location);
+  const parsed = locationSchema.safeParse(p.location);
+  if (!parsed.success || parsed.data.projectId !== p.projectId)
+    throw new ApiError('INVALID_REQUEST', 'Выберите диапазон байтов в текущем проекте.');
+  const location = parsed.data;
   const captures = await findCapture(ctx, location.projectId, location.captureId);
+  const proof = p.sources === undefined ? await sources(ctx, location) : array(p.sources);
+  if (!proof.length)
+    throw new ApiError(
+      'SOURCE_UNAVAILABLE',
+      'В выбранном диапазоне нет исходных пакетов. Откройте обмен и выберите участок с сохранёнными байтами.',
+    );
   const { projectId, ...body } = p;
   return ctx.wire(
     p.evidenceId ? 'patchEvidence' : 'saveEvidence',
-    { ...body, projectId, captureSha256: captures.sha256 },
+    { ...body, projectId, sources: proof, captureSha256: captures.sha256 },
     ctx.options,
   );
 }

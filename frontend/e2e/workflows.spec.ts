@@ -362,10 +362,12 @@ test('AT-25/26 отчёт и ZIP доступны после готовност�
   expect(markdown).toContain('Снимок:');
   expect(markdown).toContain('Демонстрационный отчёт');
   await page.getByRole('button', { name: 'Экспортировать проект ZIP' }).click();
-  await expect(page.getByRole('link', { name: 'Скачать ZIP', exact: true })).toBeVisible();
+  const exportDialog = page.getByRole('dialog', { name: 'Экспорт проекта ZIP' });
+  await expect(exportDialog.getByRole('link', { name: 'Скачать ZIP', exact: true })).toBeVisible();
   const zipDownload = page.waitForEvent('download');
-  await page.getByRole('link', { name: 'Скачать ZIP', exact: true }).click();
+  await exportDialog.getByRole('link', { name: 'Скачать ZIP', exact: true }).click();
   const zip = await zipDownload;
+  await exportDialog.getByRole('button', { name: 'Закрыть диалог' }).click();
   await page.getByRole('button', { name: 'Импортировать ZIP', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Проект ZIP', { exact: true }).setInputFiles({

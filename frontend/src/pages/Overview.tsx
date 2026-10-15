@@ -71,22 +71,40 @@ export default function Overview() {
             <h2>С чего начать</h2>
             <p>
               {project.captures
-                ? 'Запись загружена. Открой обмен, выбери соединение по адресам устройств и посмотри переданные байты.'
+                ? 'Запись загружена. Добавь журнал действий CSV, если он есть, и открой сравнение: программа покажет известные значения рядом с найденными в байтах. Выбери один пример, чтобы увидеть объяснение.'
                 : 'Добавь PCAP / PCAPNG — файл с записью обмена между устройствами. После обработки здесь появится кнопка «Исследовать».'}
             </p>
             <div className="toolbar">
               {project.captures > 0 && (
-                <Link className="button primary" to={'/projects/' + project.projectId + '/traffic'}>
-                  Посмотреть обмен
-                </Link>
+                <>
+                  <Link
+                    className="button primary"
+                    to={'/projects/' + project.projectId + '/compare?mode=research'}
+                  >
+                    Сравнить значения
+                  </Link>
+                  <Link
+                    className="button secondary"
+                    to={'/projects/' + project.projectId + '/actions'}
+                  >
+                    Добавить журнал действий
+                  </Link>
+                  <Link
+                    className="button secondary"
+                    to={'/projects/' + project.projectId + '/traffic'}
+                  >
+                    Посмотреть обмен
+                  </Link>
+                </>
               )}
               <Link className="button secondary" to={'/projects/' + project.projectId + '/guide'}>
                 Как работать: пример по шагам
               </Link>
             </div>
             <p className="muted">
-              Поле сообщения — это участок байтов, которому ты задаёшь имя и способ чтения. Начать
-              просмотр можно без схемы и журнала действий.
+              Поле — несколько байтов, которые можно прочитать как одно значение. В сравнении можно
+              начать с готового предложения; без журнала программа покажет постоянные и изменяющиеся
+              участки.
             </p>
           </section>
           <section className="panel">

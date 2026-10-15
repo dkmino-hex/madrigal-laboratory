@@ -1022,12 +1022,26 @@ export async function dispatch(
                 resultId: item.captureId + '-' + item.assemblyId + '-' + result.resultId,
               }));
             });
+      const rows =
+        params.view === 'checks'
+          ? results.map((item) => ({
+              checkId: item.resultId,
+              rule: item.rule,
+              status: item.status,
+              reason: item.reason,
+              location: item.location,
+              sources: item.sources,
+            }))
+          : results;
       result = page(
-        results.filter(
+        rows.filter(
           (item) =>
             (!params.status || item.status === params.status) &&
             (!params.rule || item.rule.includes(text(params, 'rule'))) &&
-            (!params.captureId || item.location.captureId === params.captureId),
+            (!params.captureId || item.location.captureId === params.captureId) &&
+            (!params.source || item.location.streamId === params.source) &&
+            (!params.q ||
+              JSON.stringify(item).toLowerCase().includes(text(params, 'q').toLowerCase())),
         ),
         params,
       );

@@ -173,6 +173,10 @@ func (h *AnalysisHandler) ResultsGet(w http.ResponseWriter, r *http.Request) {
 		h.messagesPage(w, r, run, limit, offset)
 		return
 	}
+	if r.URL.Query().Get("view") == "checks" {
+		h.checksPage(w, r, run, limit, offset)
+		return
+	}
 	raw, e := h.Repo.Results(r.Context(), run.ProjectID, run.RunID)
 	if e != nil {
 		analysisError(w, e)

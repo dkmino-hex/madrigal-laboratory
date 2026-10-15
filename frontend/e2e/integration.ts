@@ -142,17 +142,23 @@ test('все операции клиента используют реальны
             actions.items[0]!.parameters.includes('18446744073709551615'),
           'CSV values/search/type',
         );
-        const evidence = await api.saveEvidence(
-          {
-            projectId,
-            location,
-            sources,
-            kind: 'support',
-            status: 'tentative',
-            basis: 'Исходные байты',
-            actionId: actions.items[0]!.actionId,
-          },
-          key(),
+        const evidenceKey = key();
+        const evidenceInput = {
+          projectId,
+          location,
+          kind: 'support',
+          status: 'tentative',
+          basis: 'Исходные байты',
+          actionId: actions.items[0]!.actionId,
+        };
+        const evidence = await api.saveEvidence(evidenceInput, evidenceKey);
+        assert(
+          JSON.stringify(evidence.sources) === JSON.stringify(sources),
+          'Manual evidence resolves SourceMap',
+        );
+        assert(
+          (await api.saveEvidence(evidenceInput, evidenceKey)).evidenceId === evidence.evidenceId,
+          'Manual evidence retry',
         );
         const confirmed = await api.saveEvidence(
           { projectId, ...evidence, status: 'confirmed', basis: 'Проверено по кадру' },
@@ -340,12 +346,39 @@ test('все операции клиента используют реальны
           key(),
         );
         await wait(projectId, rebuild.job.jobId);
+        const history = await api.assemblyHistory({ projectId, captureId: capture.captureId });
+        assert(
+          history.items.length === 2 &&
+            history.items.every((item) => item.engineVersion && item.createdAt),
+          'Assembly history metadata',
+        );
+        const individual = await api.checks({
+          projectId,
+          runId: run.runId,
+          rule: 'bound',
+          captureId: capture.captureId,
+        });
+        assert(
+          individual.items.length > 0 &&
+            individual.items.every(
+              (item) => item.rule === 'bound' && item.location?.captureId === capture.captureId,
+            ),
+          'Individual checks retain source and capture filter',
+        );
+        assert(
+          (await api.checks({ projectId, runId: run.runId, q: 'no-such-check-text' })).items
+            .length === 0,
+          'Check search before pagination',
+        );
         return {
           projectId,
           restoredId,
           runId: run.runId,
           location,
+          actionId: actions.items[0]!.actionId,
           messages: run.summary.messages,
+          interpretationId: interpretation.interpretationId,
+          revisionId: revision.revisionId,
         };
       } catch (error) {
         const failure = error as Error & { details?: unknown; code?: string };
@@ -361,12 +394,168 @@ test('все операции клиента используют реальны
   const gateway = process.env.MADRIGAL_GATEWAY_URL!;
   await page.goto(`${gateway}/projects/${data.projectId}/runs/${data.runId}`);
   await expect(page.getByRole('heading', { name: 'Закреплённые входы' })).toBeVisible();
+  await page.getByLabel('Показать результаты').selectOption('checks');
+  await expect(page.getByRole('columnheader', { name: 'Объяснение', exact: true })).toBeVisible();
+  await page.getByLabel('Поиск в результатах').fill('no-such-check-text');
+  await expect(page.getByText('Нет результатов по этим условиям', { exact: true })).toBeVisible();
+  await page.getByLabel('Поиск в результатах').fill('');
+  await expect(page.getByRole('columnheader', { name: 'Объяснение', exact: true })).toBeVisible();
+  const exportedResults = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Скачать результаты NDJSON' }).click();
+  const ndjson = await exportedResults;
+  expect(
+    (await readFile((await ndjson.path())!, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line))
+      .every((item) => item.rule === 'bound'),
+  ).toBe(true);
+  await page.goto(
+    `${gateway}/projects/${data.projectId}/interpretations/${data.interpretationId}?revisionId=${data.revisionId}`,
+  );
+  await expect(page.getByLabel('Название поля 1')).toBeVisible();
+  await page.getByLabel('Как выделять сообщения').selectOption('length');
+  await page.getByLabel('Размер заголовка, байт').fill('6');
+  await page.getByLabel('Позиция длины в заголовке').fill('3');
+  await page.getByLabel('Как выделять сообщения').selectOption('fixed');
+  await page.getByLabel('Название поля 1').fill('renamed_opcode');
+  await page.getByLabel('Тип поля 1', { exact: true }).selectOption('uint16be');
+  await page.getByLabel('Позиция поля 1', { exact: true }).fill('0');
+  await page.getByLabel('Масштаб поля 1', { exact: true }).fill('0.');
+  await expect(
+    page.getByRole('button', { name: 'Сохранить новую ревизию', exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel('Масштаб поля 1', { exact: true }).fill('0.01');
+  await page.getByRole('button', { name: 'Добавить поле', exact: true }).click();
+  await page.getByLabel('Максимум правила 1', { exact: true }).fill('18446744073709551615');
+  const revisionResponse = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      response.url().endsWith(`/interpretations/${data.interpretationId}/revisions`),
+  );
+  await page.getByRole('button', { name: 'Сохранить новую ревизию', exact: true }).click();
+  const written = await revisionResponse;
+  expect(written.ok()).toBe(true);
+  const savedRevision = await written.json();
+  expect(savedRevision.schemaJson).toContain('18446744073709551615');
+  expect(JSON.parse(savedRevision.schemaJson)).toMatchObject({
+    framing: { fixedLength: 4 },
+    fields: [
+      { name: 'renamed_opcode', type: 'uint16be', offset: 0, scale: 0.01 },
+      { type: 'uint8' },
+    ],
+    checks: [{ field: 'renamed_opcode' }],
+  });
+  await expect(page.getByText('Сохранённый JSON', { exact: true })).toBeVisible();
+  const previewResponse = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().includes('/preview'),
+  );
+  await page.getByRole('button', { name: 'Выполнить preview', exact: true }).click();
+  const previewed = await previewResponse;
+  expect(previewed.ok()).toBe(true);
+  expect(previewed.request().postDataJSON().revisionId).toBe(savedRevision.revisionId);
+  await expect(page.locator('.preview-panel .results-table tbody tr').first()).toBeVisible();
+  await mkdir('test-results/integration', { recursive: true });
+  await page.screenshot({ path: 'test-results/integration/schema-builder.png', fullPage: true });
+  const discoveryResponse = page.waitForResponse(
+    (response) => response.request().method() === 'POST' && response.url().endsWith('/discoveries'),
+  );
+  await page.goto(
+    `${gateway}/projects/${data.projectId}/compare?revisionId=${savedRevision.revisionId}`,
+  );
+  const discovered = await discoveryResponse;
+  expect(discovered.ok()).toBe(true);
+  expect(discovered.request().postDataJSON().revisionId).toBe(savedRevision.revisionId);
+  await expect(page.getByLabel('Границы сообщений для автосравнения')).toHaveValue(
+    savedRevision.revisionId,
+  );
+  await page.goto(`${gateway}/projects/${data.projectId}/artifacts?runId=${data.runId}`);
+  await expect(page.getByRole('button', { name: 'Копировать команду PowerShell' })).toBeVisible();
+  await expect(page.locator('.command-preview')).toContainText('--assembly');
   const source = new URLSearchParams(data.location);
   await page.goto(`${gateway}/projects/${data.projectId}/traffic?${source}`);
   await expect(page.getByRole('grid')).toBeVisible();
+  await page.getByText('История сборок записи', { exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Открыть эту сборку', exact: true })).toHaveCount(
+    2,
+  );
+  await page.getByRole('button', { name: 'Открыть эту сборку', exact: true }).first().click();
+  await expect(page).toHaveURL(new RegExp('assemblyId=' + data.location.assemblyId));
+  await expect(page.getByRole('grid')).toBeVisible();
+  await page.getByRole('button', { name: 'Исходные пакеты', exact: true }).click();
   await expect(page.locator('.source-packet').first()).toBeVisible();
   await page.reload();
   await expect(page.getByRole('grid')).toBeVisible();
+  await page.goto(`${gateway}/projects/${data.projectId}/actions?actionId=${data.actionId}`);
+  const basis = 'Ручная связь из формы: изменение температуры';
+  await page.getByLabel('Основание связи', { exact: true }).fill(basis);
+  const save = page.getByRole('button', { name: 'Сохранить ручную связь', exact: true });
+  await expect(save).toBeEnabled();
+  const response = page.waitForResponse(
+    (item) =>
+      item.request().method() === 'POST' &&
+      item.url().endsWith(`/projects/${data.projectId}/evidence`),
+  );
+  await save.click();
+  const saved = await response;
+  expect(saved.ok()).toBe(true);
+  expect(saved.request().postDataJSON().sources.length).toBeGreaterThan(0);
+  const evidenceBody = await saved.json();
+  expect(evidenceBody.actionId).toBe(data.actionId);
+  expect(evidenceBody.sources.length).toBeGreaterThan(0);
+  await expect(page.getByText('Связь сохранена:', { exact: false })).toBeVisible();
+  await page.reload();
+  const card = page.locator('.evidence-card').filter({ hasText: basis });
+  await expect(card).toHaveCount(1);
+  await card.getByRole('button', { name: 'Редактировать связь' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Редактирование ручной связи' });
+  await dialog.getByLabel('Основание сохранённой связи').fill(basis + ' — уточнение');
+  await dialog.getByRole('button', { name: 'Сохранить изменения связи' }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.locator('.evidence-card').filter({ hasText: basis + ' — уточнение' }),
+  ).toHaveCount(1);
+  await page.getByRole('button', { name: 'Экспортировать проект ZIP', exact: true }).click();
+  const exportDialog = page.getByRole('dialog', { name: 'Экспорт проекта ZIP' });
+  const downloadLink = exportDialog.getByRole('link', { name: 'Скачать ZIP', exact: true });
+  await expect(downloadLink).toBeVisible();
+  const downloaded = page.waitForEvent('download');
+  await downloadLink.click();
+  const archive = await downloaded;
+  const archivePath = await archive.path();
+  expect(archivePath).not.toBeNull();
+  expect((await readFile(archivePath!)).length).toBeGreaterThan(0);
+  await exportDialog.getByRole('button', { name: 'Закрыть диалог' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const tools = page.getByRole('group', { name: 'Импорт и экспорт проекта' });
+  await expect(tools.getByRole('button', { name: 'Импортировать ZIP', exact: true })).toBeVisible();
+  await expect(
+    tools.getByRole('button', { name: 'Экспортировать проект ZIP', exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await tools.getByRole('button', { name: 'Импортировать ZIP', exact: true }).click();
+  const importDialog = page.getByRole('dialog', { name: 'Импортировать проект ZIP' });
+  await importDialog.getByLabel('Проект ZIP', { exact: true }).setInputFiles({
+    name: archive.suggestedFilename(),
+    mimeType: 'application/zip',
+    buffer: await readFile(archivePath!),
+  });
+  await importDialog.getByRole('button', { name: 'Импортировать проект ZIP', exact: true }).click();
+  const openImported = importDialog.getByRole('link', {
+    name: 'Открыть импортированный проект',
+    exact: true,
+  });
+  await expect(openImported).toBeVisible();
+  const importedPath = await openImported.getAttribute('href');
+  expect(importedPath).not.toBe(`/projects/${data.projectId}`);
+  await openImported.click();
+  await expect(page).toHaveURL(new RegExp(importedPath! + '$'));
+  await expect(page.getByRole('heading', { name: 'Исходные записи' })).toBeVisible();
+  await page.getByRole('link', { name: 'Журнал действий', exact: true }).click();
+  await expect(
+    page.locator('.evidence-card').filter({ hasText: basis + ' — уточнение' }),
+  ).toHaveCount(1);
   await mkdir('test-results/integration', { recursive: true });
   await writeFile('test-results/integration/last-run.json', JSON.stringify(data, null, 2));
 });

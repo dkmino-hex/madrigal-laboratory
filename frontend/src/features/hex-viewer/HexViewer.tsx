@@ -4,6 +4,7 @@ import type { ByteWindow, Location } from '../../shared/api/contracts/models';
 import { boundedIndex, decimal, hexOffset } from '../../shared/model/precision';
 import { byteAscii, byteHex, cellAt, copyKnown } from '../../shared/model/bytes';
 import { Banner, Button } from '../../shared/ui/common';
+import type { FieldAnnotation } from '../../shared/model/message-inspection';
 
 function revealColumns(
   body: HTMLDivElement | null,
@@ -35,7 +36,7 @@ export function HexViewer({
   selection: Location;
   onSelect: (start: string, length: string, windowStart?: string) => void;
   onWindow: (start: string) => void;
-  annotations?: { start: string; length: string; label: string }[];
+  annotations?: FieldAnnotation[];
 }) {
   const annotationAt = (offset: bigint) =>
     annotations.find(
@@ -251,7 +252,16 @@ export function HexViewer({
                       aria-label={'Байт ' + offset + ': ' + byteHex(cell)}
                       key={String(offset)}
                       data-offset={String(offset)}
-                      data-candidate={cell.kind === 'known' && !!annotationAt(offset)}
+                      data-candidate={
+                        cell.kind === 'known' &&
+                        !!annotationAt(offset) &&
+                        annotationAt(offset)?.kind !== 'field'
+                      }
+                      data-field-color={
+                        cell.kind === 'known' && annotationAt(offset)?.kind === 'field'
+                          ? annotationAt(offset)?.color
+                          : undefined
+                      }
                       title={
                         cell.kind === 'known'
                           ? (annotationAt(offset)?.label ?? String(offset))
@@ -283,6 +293,11 @@ export function HexViewer({
                   {cells.map(({ offset, cell }) => (
                     <span
                       key={String(offset)}
+                      data-field-color={
+                        cell.kind === 'known' && annotationAt(offset)?.kind === 'field'
+                          ? annotationAt(offset)?.color
+                          : undefined
+                      }
                       className={(offset >= start && offset < end ? 'selected ' : '') + cell.kind}
                     >
                       {byteAscii(cell)}

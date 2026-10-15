@@ -1,5 +1,6 @@
 import {
   useId,
+  useRef,
   useState,
   cloneElement,
   isValidElement,
@@ -171,12 +172,25 @@ export function Modal({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const returnFocus = useRef<HTMLElement | null>(null);
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       {trigger && <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>}
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content">
+        <Dialog.Content
+          className="dialog-content"
+          onOpenAutoFocus={() => {
+            if (!trigger && document.activeElement instanceof HTMLElement)
+              returnFocus.current = document.activeElement;
+          }}
+          onCloseAutoFocus={(event) => {
+            if (!trigger && returnFocus.current?.isConnected) {
+              event.preventDefault();
+              returnFocus.current.focus({ preventScroll: true });
+            }
+          }}
+        >
           <div className="dialog-header">
             <Dialog.Title>{title}</Dialog.Title>
             <Dialog.Close asChild>

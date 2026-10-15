@@ -179,6 +179,27 @@ export async function sessionPage(ctx: Context, p: Params) {
   return { ...data, items };
 }
 export async function assemblies(ctx: Context, p: Params) {
+  if (p.view === 'history') {
+    const raw = record(
+      await ctx.wire('assemblies', { projectId: p.projectId, captureId: p.captureId }, ctx.options),
+    );
+    return {
+      items: array(raw.items).map((raw) => {
+        const value = record(raw);
+        return {
+          assemblyId: text(value.assemblyId),
+          captureId: text(p.captureId),
+          settingsVersion: text(value.settingsVersion),
+          settings: JSON.stringify(value.settings),
+          engineVersion: text(value.engineVersion),
+          status: text(value.status),
+          diagnostics: diagnostics(value.diagnostics),
+          createdAt: text(value.createdAt),
+          ...(value.finishedAt ? { finishedAt: text(value.finishedAt) } : {}),
+        };
+      }),
+    };
+  }
   const selected = await locateSession(ctx, p);
   const data = page(
     await ctx.wire('assemblies', { projectId: p.projectId, captureId: p.captureId }, ctx.options),

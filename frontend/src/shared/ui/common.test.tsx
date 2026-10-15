@@ -1,4 +1,5 @@
 import { it, expect, vi } from 'vitest';
+import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Badge, ErrorState, Modal, Button, Field, CopyButton, Pagination } from './common';
@@ -36,6 +37,28 @@ it('диалог имеет имя, описание и возвращает ф�
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
+});
+it('диалог без Radix.Trigger возвращает фокус на действие, которое его открыло', async () => {
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Записать находку</Button>
+        {open && (
+          <Modal open title="Наблюдение" description="Описание" onOpenChange={setOpen}>
+            <input aria-label="Текст" />
+          </Modal>
+        )}
+      </>
+    );
+  }
+  const user = userEvent.setup();
+  render(<Harness />);
+  const opener = screen.getByRole('button', { name: 'Записать находку' });
+  await user.click(opener);
+  expect(screen.getByRole('dialog', { name: 'Наблюдение' })).toBeInTheDocument();
+  await user.keyboard('{Escape}');
+  expect(opener).toHaveFocus();
 });
 it('ошибка формы программно связана с полем', () => {
   render(

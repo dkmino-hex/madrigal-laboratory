@@ -11,6 +11,7 @@ const identityKeys: Partial<Record<Operation, string>> = {
   interpretations: 'interpretationId',
   runs: 'runId',
   evidence: 'evidenceId',
+  artifacts: 'artifactId',
 };
 
 type Page<T> = { items: T[]; nextCursor: string | null; total?: string };

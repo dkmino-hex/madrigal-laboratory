@@ -8,18 +8,16 @@ import type { Artifact } from '../shared/api/contracts/models';
 import { DownloadLink } from '../shared/ui/DownloadLink';
 import {
   Badge,
-  Banner,
   Button,
   Empty,
   ErrorState,
   Field,
-  Modal,
   PageHeading,
   Pagination,
   QueryState,
 } from '../shared/ui/common';
-import { UploadWidget } from '../features/projects/Upload';
 import { JobsCenter, trackJob } from '../features/jobs/Jobs';
+import { ReapplyCommand } from '../features/runs/ReapplyCommand';
 function ArtifactDownload({ artifact }: { artifact: Artifact }) {
   if (artifact.status !== 'READY' || !artifact.downloadUrl)
     return <span className="muted">Скачивание недоступно</span>;
@@ -67,11 +65,6 @@ export default function Artifacts() {
     ).values(),
   ];
   const completed = choices.some((run) => run.runId === runId && run.status === 'COMPLETED');
-  const exportProject = useCommand(
-    'exportProject',
-    (id: string, options) => api.exportProject(id, options),
-    [queryKey(projectId, 'artifacts')],
-  );
   const report = useCommand(
     'createReport',
     (id: string, options) => api.createReport(projectId, id, options),
@@ -82,28 +75,6 @@ export default function Artifacts() {
       <PageHeading
         title="Отчёты и перенос"
         subtitle="Артефакты публикуются после завершения серверного задания."
-        actions={
-          <>
-            <Modal
-              title="Импортировать проект ZIP"
-              description="Создаёт отдельный проект в IMPORTING. Проверка версии, хешей и зависимостей выполняется Workspace."
-              trigger={<Button>Импортировать ZIP</Button>}
-            >
-              <UploadWidget kind="project" />
-            </Modal>
-            <Button
-              variant="primary"
-              disabled={exportProject.isPending}
-              onClick={() =>
-                exportProject.mutate(projectId, {
-                  onSuccess: (result) => trackJob(projectId, result.job.jobId),
-                })
-              }
-            >
-              Экспортировать проект ZIP
-            </Button>
-          </>
-        }
       />
       <section className="panel">
         <div className="panel-heading">
@@ -150,7 +121,7 @@ export default function Artifacts() {
           Отчёт связывает runId со снимком исследовательских записей. Незавершённый артефакт
           недоступен.
         </p>
-        {[report.error, exportProject.error, runs.error].filter(Boolean).map((error, index) => (
+        {[report.error, runs.error].filter(Boolean).map((error, index) => (
           <ErrorState key={index} error={error} />
         ))}
       </section>
@@ -211,20 +182,9 @@ export default function Artifacts() {
           )}
         </QueryState>
       </section>
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>Повторное применение без GUI</h2>
-        </div>
-        <Banner tone="warning">
-          CLI и его подтверждённый синтаксис отсутствуют (AN-16, Backend 2). Команда повторного
-          применения пока недоступна. После передачи backend-документации здесь появятся проверенная
-          команда, формат входов и условия запуска.
-        </Banner>
-        <p>
-          Точный JSON сохранённой ревизии доступен в редакторе интерпретации. Копирование команды не
-          будет означать её выполнение.
-        </p>
-      </section>
+      <ReapplyCommand
+        run={choices.find((run) => run.runId === runId && run.status === 'COMPLETED')}
+      />
       <JobsCenter projectId={projectId} />
     </>
   );

@@ -32,3 +32,24 @@ it('проверяет дубликаты полей и границу uint32', 
   expect(schemaProblems(schema)['fields.1.id']).toContain('уникальные');
   expect(schemaProblems(schema)['rules.0.maximum']).toContain('4294967295');
 });
+it('проверяет native ссылки и размещение длины в заголовке', () => {
+  expect(
+    schemaProblems({
+      framing: { headerLength: 4, lengthOffset: 3, lengthType: 'uint16be' },
+      fields: [{ name: 'x', type: 'uint8', lengthFrom: 'future' }],
+      checks: [{ id: 'c', field: 'missing', op: 'sequence' }],
+    }),
+  ).toMatchObject({
+    'framing.headerLength': expect.stringContaining('заголовок'),
+    'fields.0.lengthFrom': expect.stringContaining('предыдущее'),
+    'checks.0.field': expect.stringContaining('существующее'),
+    'checks.0.op': expect.stringContaining('поддерживаемое'),
+  });
+  expect(
+    schemaProblems({
+      framing: { fixedLength: 8 },
+      fields: [{ name: 'x', type: 'uint64be' }],
+      checks: [{ id: 'c', field: 'x', op: 'eq', value: JSON.parse('18446744073709551615') }],
+    }),
+  ).toEqual({});
+});
