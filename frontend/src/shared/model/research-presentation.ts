@@ -1,5 +1,6 @@
 import type { AutomaticInput, ResearchCandidate, ResearchRow } from '../api/contracts/research';
 import { candidateValue, researchBytes } from './research';
+import { decimal } from './precision';
 
 const names: Record<string, [string, string]> = {
   device_time_ms: ['Время устройства', 'мс'],
@@ -41,6 +42,10 @@ export function fieldHex(row: ResearchRow, candidate: ResearchCandidate) {
   const bytes = researchBytes(row);
   if (candidate.offset + candidate.length > bytes.length) return null;
   return bytes.slice(candidate.offset, candidate.offset + candidate.length).map(value => value.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+}
+export function candidateLocation(row: ResearchRow, candidate: ResearchCandidate) {
+  if (candidate.offset + candidate.length > Number(row.location.length)) return row.location;
+  return {...row.location, start:decimal(BigInt(row.location.start)+BigInt(candidate.offset)), length:decimal(String(candidate.length))};
 }
 export function exampleTime(timestamp: string) {
   const date = new Date(timestamp);
