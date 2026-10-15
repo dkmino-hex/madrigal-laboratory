@@ -1,4 +1,4 @@
-import type { Run } from '../../shared/api/contracts/draft';
+import type { Run } from '../../shared/api/contracts/models';
 import { Badge, Banner } from '../../shared/ui/common';
 import { summaryConclusion } from '../../shared/model/runs';
 import { formatInteger } from '../../shared/model/precision';
@@ -37,6 +37,7 @@ export function RunSummary({ run }: { run: Run }) {
             <tr>
               <th>Статус проверки</th>
               <th>Количество правил</th>
+              {run.summary.messageStatuses && <th>Количество сообщений</th>}
             </tr>
           </thead>
           <tbody>
@@ -46,11 +47,25 @@ export function RunSummary({ run }: { run: Run }) {
                   <Badge status={status} />
                 </td>
                 <td className="mono">{formatInteger(count)}</td>
+                {run.summary.messageStatuses && (
+                  <td className="mono">
+                    {formatInteger(
+                      run.summary.messageStatuses[
+                        status as keyof typeof run.summary.messageStatuses
+                      ],
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <p className="muted">
+        Правила и сообщения считаются отдельно. Неприменимое сообщение может не содержать ни одной
+        проверки. PASS сообщения означает успешный структурный разбор; смысл поля оценивается по
+        правилам и дополнительным опытам.
+      </p>
     </section>
   );
 }
@@ -62,6 +77,16 @@ export function RunManifest({ run }: { run: Run }) {
         {run.manifest.synthetic && <span className="mode-label mock">Синтетический manifest</span>}
       </div>
       <dl className="metadata">
+        {run.manifest.actionSnapshotCount !== undefined && (
+          <div>
+            <dt>Закреплённый журнал</dt>
+            <dd>
+              {formatInteger(run.manifest.actionSnapshotCount)} действий ·{' '}
+              {run.manifest.actionsComplete ? 'снимок полный' : 'снимок ограничен'}. Изменения
+              текущего журнала не меняют эту проверку.
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Ревизия</dt>
           <dd>

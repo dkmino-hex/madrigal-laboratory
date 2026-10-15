@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dkmino-hex/madrigal-laboratory/services/analysis-service/internal/domain"
+	"github.com/google/uuid"
 )
 
 // domain.Snapshot contains only data owned by Analysis. It is a versioned logical export,
@@ -39,13 +40,13 @@ func (r *InterpretationRepository) ExportSnapshot(ctx context.Context, project s
 	if e != nil {
 		return s, e
 	}
-	rows, e = tx.QueryContext(ctx, `SELECT r.id,r.interpretation_id,r.version,r.schema_json,r.created_at FROM revisions r JOIN interpretations i ON i.id=r.interpretation_id WHERE i.project_id=? ORDER BY r.id`, project)
+	rows, e = tx.QueryContext(ctx, `SELECT r.id,r.interpretation_id,r.version,r.schema_json,r.created_at,r.change_comment,r.parent_revision_id FROM revisions r JOIN interpretations i ON i.id=r.interpretation_id WHERE i.project_id=? ORDER BY r.id`, project)
 	if e != nil {
 		return s, e
 	}
 	for rows.Next() {
 		var v domain.RevisionRow
-		if e = rows.Scan(&v.ID, &v.InterpretationID, &v.Version, &v.SchemaJSON, &v.CreatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.InterpretationID, &v.Version, &v.SchemaJSON, &v.CreatedAt, &v.ChangeComment, &v.ParentRevisionID); e != nil {
 			break
 		}
 		s.Revisions = append(s.Revisions, v)
@@ -102,7 +103,7 @@ func (r *InterpretationRepository) ExportSnapshot(ctx context.Context, project s
 
 // ImportSnapshot rejects unresolved external references instead of producing
 // misleading links to the source project. Callers may supply explicit maps.
-func (r *InterpretationRepository) ImportSnapshot(ctx context.Context, dest string, s domain.Snapshot, captures, assemblies, streams, settings map[string]string, importID, digest string) error {
+func (r *InterpretationRepository) ImportSnapshot(ctx context.Context, dest string, s domain.Snapshot, captures, assemblies, streams, settings map[string]string, importID, digest string, sessions ...map[string]string) error {
 	if dest == "" || s.Version != 1 || s.ProjectID == "" {
 		return errors.New("invalid snapshot version or project")
 	}
@@ -121,11 +122,48 @@ func (r *InterpretationRepository) ImportSnapshot(ctx context.Context, dest stri
 	if count != 0 {
 		return errors.New("destination Analysis project already contains data")
 	}
+	owned := map[string]map[string]string{
+		"interpretationId": {}, "revisionId": {}, "runId": {}, "resultId": {},
+		"projectId": {s.ProjectID: dest},
+	}
+	if len(sessions) != 0 {
+		owned["sessionId"] = sessions[0]
+	}
+	if len(sessions) > 1 {
+		owned["alternativeId"] = sessions[1]
+	}
+	allocate := func(kind, id string) error {
+		if id == "" || owned[kind][id] != "" {
+			return errors.New("empty or duplicate snapshot ID")
+		}
+		owned[kind][id] = uuid.NewString()
+		return nil
+	}
+	for _, row := range s.Interpretations {
+		if e = allocate("interpretationId", row.ID); e != nil {
+			return e
+		}
+	}
+	for _, row := range s.Revisions {
+		if e = allocate("revisionId", row.ID); e != nil {
+			return e
+		}
+	}
+	for _, row := range s.Runs {
+		if e = allocate("runId", row.ID); e != nil {
+			return e
+		}
+	}
+	for _, row := range s.Results {
+		if e = allocate("resultId", row.ID); e != nil {
+			return e
+		}
+	}
 	for _, v := range s.Interpretations {
 		if v.ID == "" {
 			return errors.New("empty interpretation id")
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO interpretations(id,project_id,name,description,created_at) VALUES(?,?,?,?,?)`, v.ID, dest, v.Name, v.Description, v.CreatedAt); e != nil {
+		if _, e = tx.ExecContext(ctx, `INSERT INTO interpretations(id,project_id,name,description,created_at) VALUES(?,?,?,?,?)`, owned["interpretationId"][v.ID], dest, v.Name, v.Description, v.CreatedAt); e != nil {
 			return e
 		}
 	}
@@ -133,7 +171,14 @@ func (r *InterpretationRepository) ImportSnapshot(ctx context.Context, dest stri
 		if !json.Valid([]byte(v.SchemaJSON)) {
 			return errors.New("invalid revision JSON")
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO revisions(id,interpretation_id,version,schema_json,created_at) VALUES(?,?,?,?,?)`, v.ID, v.InterpretationID, v.Version, v.SchemaJSON, v.CreatedAt); e != nil {
+		if owned["interpretationId"][v.InterpretationID] == "" {
+			return errors.New("revision references missing interpretation")
+		}
+		parent := owned["revisionId"][v.ParentRevisionID]
+		if v.ParentRevisionID != "" && parent == "" {
+			return errors.New("revision references missing parent")
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO revisions(id,interpretation_id,version,schema_json,created_at,change_comment,parent_revision_id) VALUES(?,?,?,?,?,?,?)`, owned["revisionId"][v.ID], owned["interpretationId"][v.InterpretationID], v.Version, v.SchemaJSON, v.CreatedAt, v.ChangeComment, parent); e != nil {
 			return e
 		}
 	}
@@ -163,15 +208,15 @@ func (r *InterpretationRepository) ImportSnapshot(ctx context.Context, dest stri
 			setting = mapped
 		}
 		// Replace known stream identifiers in structured JSON, never by text replacement.
-		request, e := remapJSON(v.RequestJSON, captures, assemblies, streams, settings)
+		request, e := remapJSON(v.RequestJSON, captures, assemblies, streams, settings, owned)
 		if e != nil {
 			return e
 		}
-		summary, e := remapJSON(v.SummaryJSON, captures, assemblies, streams, settings)
+		summary, e := remapJSON(v.SummaryJSON, captures, assemblies, streams, settings, owned)
 		if e != nil {
 			return e
 		}
-		manifest, e := remapJSON(v.InputManifestJSON, captures, assemblies, streams, settings)
+		manifest, e := remapJSON(v.InputManifestJSON, captures, assemblies, streams, settings, owned)
 		if e != nil {
 			return e
 		}
@@ -179,41 +224,102 @@ func (r *InterpretationRepository) ImportSnapshot(ctx context.Context, dest stri
 		if status == "pending" || status == "running" {
 			status = "failed"
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_runs(id,revision_id,assembly_id,status,created_at,completed_at,project_id,capture_id,settings_version,job_id,summary_json,request_json,capture_sha256,capture_engine_version,settings_json,input_manifest_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, v.ID, v.RevisionID, assembly, status, v.CreatedAt, v.CompletedAt, dest, capture, setting, "", summary, request, v.CaptureSHA256, v.CaptureEngineVersion, v.SettingsJSON, manifest); e != nil {
+		if owned["revisionId"][v.RevisionID] == "" {
+			return errors.New("run references missing revision")
+		}
+		jobID := "ana_" + uuid.NewString()
+		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_runs(id,revision_id,assembly_id,status,created_at,completed_at,project_id,capture_id,settings_version,job_id,summary_json,request_json,capture_sha256,capture_engine_version,settings_json,input_manifest_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, owned["runId"][v.ID], owned["revisionId"][v.RevisionID], assembly, status, v.CreatedAt, v.CompletedAt, dest, capture, setting, jobID, summary, request, v.CaptureSHA256, v.CaptureEngineVersion, v.SettingsJSON, manifest); e != nil {
+			return e
+		}
+		jobStatus, stage, code := "SUCCEEDED", "RESTORED", ""
+		if status != "completed" {
+			jobStatus, stage, code = "FAILED", "RESTORED", "ARCHIVED_FAILURE"
+			var state struct {
+				Reason string `json:"reason"`
+				Error  string `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(summary), &state); err != nil {
+				return err
+			}
+			if state.Reason == "cancelled" || state.Error == "job cancelled" || state.Error == "context canceled" {
+				jobStatus, code = "CANCELLED", ""
+			}
+			if v.Status == "pending" || v.Status == "running" || state.Reason == "PROCESS_INTERRUPTED" {
+				stage, code = "INTERRUPTED", "ARCHIVED_INTERRUPTED"
+			}
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_jobs(id,project_id,run_id,status,stage,completed,total,error_code,finished_at) VALUES(?,?,?,?,?,'1','1',NULLIF(?,''),CURRENT_TIMESTAMP)`, jobID, dest, owned["runId"][v.ID], jobStatus, stage, code); e != nil {
 			return e
 		}
 	}
 	for _, v := range s.Results {
-		payload, e := remapJSON(v.ResultJSON, captures, assemblies, streams, settings)
+		payload, e := remapJSON(v.ResultJSON, captures, assemblies, streams, settings, owned)
 		if e != nil {
 			return e
 		}
-		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_results(id,run_id,result_json,created_at) VALUES(?,?,?,?)`, v.ID, v.RunID, payload, v.CreatedAt); e != nil {
+		if owned["runId"][v.RunID] == "" {
+			return errors.New("result references missing run")
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_results(id,run_id,result_json,created_at) VALUES(?,?,?,?)`, owned["resultId"][v.ID], owned["runId"][v.RunID], payload, v.CreatedAt); e != nil {
 			return e
 		}
 	}
 	if importID != "" {
-		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_imports(project_id,import_id,archive_sha256) VALUES(?,?,?)`, dest, importID, digest); e != nil {
+		idMaps, err := json.Marshal(owned)
+		if err != nil {
+			return err
+		}
+		if _, e = tx.ExecContext(ctx, `INSERT INTO analysis_imports(project_id,import_id,archive_sha256,id_map_json) VALUES(?,?,?,?)`, dest, importID, digest, string(idMaps)); e != nil {
 			return e
 		}
 	}
 	return tx.Commit()
 }
-func remapJSON(raw string, captures, assemblies, streams, settings map[string]string) (string, error) {
+
+func (r *InterpretationRepository) ImportMappings(ctx context.Context, project, importID string) (map[string]map[string]string, error) {
+	var raw string
+	if err := r.db.QueryRowContext(ctx, `SELECT id_map_json FROM analysis_imports WHERE project_id=? AND import_id=?`, project, importID).Scan(&raw); err != nil {
+		return nil, err
+	}
+	var maps map[string]map[string]string
+	err := json.Unmarshal([]byte(raw), &maps)
+	return maps, err
+}
+func remapJSON(raw string, captures, assemblies, streams, settings map[string]string, extras ...map[string]map[string]string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return "{}", nil
 	}
 	var v any
-	if e := json.Unmarshal([]byte(raw), &v); e != nil {
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if e := decoder.Decode(&v); e != nil {
 		return "", e
 	}
 	maps := map[string]map[string]string{"captureId": captures, "assemblyId": assemblies, "streamId": streams, "settingsVersion": settings}
+	for _, extra := range extras {
+		for key, mapping := range extra {
+			maps[key] = mapping
+		}
+	}
 	var invalid error
 	var walk func(any)
 	walk = func(x any) {
 		switch t := x.(type) {
 		case map[string]any:
 			for k, val := range t {
+				if k == "sessionIds" {
+					if ids, ok := val.([]any); ok {
+						for i, raw := range ids {
+							id, ok := raw.(string)
+							mapped := maps["sessionId"][id]
+							if !ok || mapped == "" {
+								invalid = fmt.Errorf("missing sessionId mapping")
+								return
+							}
+							ids[i] = mapped
+						}
+					}
+				}
 				if m, ok := maps[k]; ok {
 					if old, yes := val.(string); yes && old != "" {
 						newID, found := m[old]
@@ -224,7 +330,7 @@ func remapJSON(raw string, captures, assemblies, streams, settings map[string]st
 						t[k] = newID
 					}
 				}
-				if k == "sessionId" {
+				if _, mapped := maps["sessionId"]; k == "sessionId" && !mapped {
 					if old, yes := val.(string); yes && old != "" {
 						invalid = fmt.Errorf("sessionId mapping not supported by Workspace: %s", old)
 						return

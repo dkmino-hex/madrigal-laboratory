@@ -88,9 +88,11 @@ func (s Store) BuildReport(ctx context.Context, j jobs.Job, progress func(string
 	if len(metadata["observations"]) == 0 {
 		out.WriteString("Записей нет.\n\n")
 	}
+	provenance := indexReportProvenance(metadata)
 	for _, obs := range metadata["observations"] {
 		id, _ := obs["id"].(string)
 		fmt.Fprintf(&out, "### %v · %s\n\n%v\n\nСтатус: %v.\n\n", obs["kind"], id, obs["text"], obs["status"])
+		provenance.writeObservation(&out, obs)
 		for _, ev := range metadata["evidence"] {
 			if ev["observation_id"] != id || fmt.Sprint(ev["selected"]) == "0" {
 				continue
@@ -99,7 +101,7 @@ func (s Store) BuildReport(ctx context.Context, j jobs.Job, progress func(string
 		}
 		out.WriteString("\n")
 	}
-	out.WriteString("## Неизвестное и ограничения\n\nЭтот отчёт отражает только завершённый запуск и закреплённый снимок Workspace. Неизвестные интервалы и отсутствие доказательств не считаются подтверждением.\n\n")
+	out.WriteString("## Неизвестное и ограничения\n\nЭтот отчёт отражает завершённый запуск и закреплённый снимок Workspace. Область анализа, SHA-256, сборки, настройки и версия движка находятся в inputManifestJson результата. Статусы PASS/FAIL относятся к конкретным правилам. INCONCLUSIVE означает недостаток данных, NOT_APPLICABLE — неприменимость, UNKNOWN — отсутствие охвата. Успешный разбор и совпадение с журналом не доказывают назначение поля или универсальность модели. Неизвестные интервалы и отсутствие доказательств не считаются подтверждением.\n\n")
 	out.WriteString("## Открытые вопросы\n\n")
 	for _, obs := range metadata["observations"] {
 		if obs["kind"] == "HYPOTHESIS" && obs["status"] != "SUPPORTED" {

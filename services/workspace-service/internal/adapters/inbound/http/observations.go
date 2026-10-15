@@ -14,6 +14,7 @@ func registerObservations(mux *http.ServeMux, s projects.Store, fail func(http.R
 			httpapi.Error(w, 400, "INVALID_JSON", "expected observation JSON")
 			return
 		}
+		input.IdempotencyKey = r.Header.Get("Idempotency-Key")
 		item, err := s.CreateObservation(r.Context(), r.PathValue("projectId"), input, s.Evidence)
 		if err != nil {
 			fail(w, err)
@@ -42,6 +43,7 @@ func registerObservations(mux *http.ServeMux, s projects.Store, fail func(http.R
 			httpapi.Error(w, 400, "INVALID_JSON", "expected observation patch JSON")
 			return
 		}
+		input.IdempotencyKey = r.Header.Get("Idempotency-Key")
 		item, err := s.PatchObservation(r.Context(), r.PathValue("projectId"), r.PathValue("observationId"), input)
 		if err != nil {
 			fail(w, err)

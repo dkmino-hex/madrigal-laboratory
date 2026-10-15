@@ -1,91 +1,49 @@
-# МАДРИГАЛ — frontend
+# МАДРИГАЛ — Frontend
 
-Исследовательское рабочее место для байтов, интерпретаций и проверок протокола. React, TypeScript strict, Vite, React Router, TanStack Query.
+React, TypeScript strict, Vite, React Router и TanStack Query. Интерфейс подключён к Workspace, Capture и Analysis через публичный Gateway. Production Frontend собирается вместе с сервисами и открывается на `http://127.0.0.1:8080/projects` после `docker compose up --build -d --wait` из корня репозитория.
 
-Реализованы экраны задач FE-01–FE-11 из Word-ТЗ: проекты, обмен и HEX, журнал действий, сравнение, редактор интерпретаций, гипотезы, проверки корпуса, исходные пакеты и задания. Для просмотра интерфейса используется явный mock-режим. Подключение к настоящему Gateway ещё не проверено: mapping публичного API в этой ветке не заполнен. [Задачи и критерии](docs/frontend/requirements.md), [состояние реализации](docs/frontend/progress.md), [проверки](docs/frontend/verification.md), [подключение backend](docs/frontend/integration.md).
-
-## Установка и запуск
-
-Из корня Git-репозитория:
+## Разработка
 
 ```powershell
-cd frontend
 npm ci
-npx playwright install chromium
-npm run dev:mock
-```
-
-Открыть адрес Vite из терминала (обычно http://127.0.0.1:5173/projects). Проверено с Node 24.19.0 и npm 11.17.0 на Windows 11 x64; минимальное требование проекта — Node 22.12.0. Единственный менеджер проекта — npm, версии закреплены в `package-lock.json`. pnpm доступен в окружении, но второй lockfile не создаётся.
-
-Для режима настоящих данных:
-
-```powershell
+$env:VITE_API_BASE_URL = 'http://127.0.0.1:8080'
 npm run dev:api
 ```
 
-Без согласованного mapping этот режим показывает `CONTRACT_PENDING`. Сам Vite не является Gateway. В ветке `backend/analysis-workspace` есть `api/openapi.yaml`; его соответствие операциям frontend нужно согласовать и проверить. При разработке с отдельным публичным Gateway его фактический адрес указывается в `.env.api.local`; CORS согласовывается с владельцем Gateway. Приватные сервисы браузеру не нужны.
+Открыть `http://localhost:5173`. Gateway разрешает `localhost:5173` и `127.0.0.1:5173` по умолчанию; другие origins задаются через `FRONTEND_ORIGIN` списком через запятую. Для демонстрации без backend есть отдельная команда `npm run dev:mock`.
 
-| Переменная                                                       | Назначение / значение по умолчанию                                                                   |
-| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `VITE_DATA_MODE`                                                 | `mock` в `.env.mock`, `api` в `.env.api`; compile-time для production                                |
-| `VITE_API_BASE_URL`                                              | Публичный Gateway, `/` для раздачи SPA и API с одного origin                                         |
-| `MADRIGAL_OPENAPI_FILE`                                          | Только генератор/preflight; согласованный OpenAPI 3.x, по умолчанию `contracts/gateway.openapi.json` |
-| `MADRIGAL_GATEWAY_URL`                                           | Только API E2E; фактический публичный origin, раздающий SPA                                          |
-| `MADRIGAL_PROJECT_ID`, `MADRIGAL_RUN_ID`, `MADRIGAL_SOURCE_LINK` | Только API E2E; идентификаторы и точная прямая ссылка из реального корпуса                           |
+Node.js — 22.12 или новее. Зависимости закреплены в `package-lock.json`; используется npm. `VITE_DATA_MODE` и `VITE_API_BASE_URL` доступны браузеру. Production использует API; query-параметры не включают MSW.
 
-В `VITE_*` нельзя хранить секреты: эти значения попадают в браузер. `?mode=mock/api` и панель инструментов действуют только в dev. Явно выбранный режим сохраняется в sessionStorage этой вкладки отдельно для Vite mock/api окружений: переход без `mode` и reload не переключают API обратно на demo. Production `npm run build` всегда собирает API-вариант; query-параметр и sessionStorage не включают MSW.
+## Структура и контракт
 
-## Демонстрационный сценарий
+- `src/pages` — экраны и маршруты.
+- `src/features` — HEX, исходные пакеты, задания, загрузки и результаты.
+- `src/shared/api/transport.ts` — HTTP, отмена, таймауты и ошибки.
+- `src/shared/api/live` — преобразование DTO отдельных сервисов в модели интерфейса.
+- `src/shared/api/contracts/models.ts` — Zod-модели и проверка контекста данных.
+- `src/shared/api/contracts/gateway-mapping.json` — реальные HTTP-операции.
+- `src/shared/api/generated/gateway.d.ts` — типы из корневого `contracts/gateway.openapi.json`.
 
-Открыть «Термоконтроллер · стенд 04» → «Обмен и байты» → диапазон `[1000,1004)`. Значение `15 00 00 00` — uint32 LE 21; доступны кадры 7, 8 и идентичная ретрансляция 9. Диапазон `[1004,1008)` содержит 42 и даёт контрпример правилу max 30. Пропуск `[64,72)`, конфликт `[96,100)`, усечение `[120,128)` доступны независимо от известных соседних байтов.
+Источник OpenAPI находится на один уровень выше Frontend. Генератор использует его по умолчанию; `MADRIGAL_OPENAPI_FILE` позволяет указать другой файл. [Подробности интеграции](docs/frontend/integration.md).
 
-Для нового проекта скачать подготовленный PCAP/PCAPNG из dev-панели, создать проект и загрузить файл. Пример малого demo CSV:
+Большие координаты представлены десятичными строками, значения `uint64` — точными строками результата. Источник всегда привязан к конкретным capture/assembly/session/stream и направлению. Исторические ревизии содержат исходный JSON, комментарий и родительскую ревизию. CSV принимается в формате `timestamp,name,type,parameters` либо исходном формате из восьми колонок; импорт асинхронный.
 
-```csv
-timestamp,name,type,parameters
-2026-10-11T12:34:56.123456789Z,Уставка 21,setpoint,21
-```
-
-Импортировать журнал, связать действие с диапазоном, сравнить примеры, сохранить гипотезу. В редакторе сохранить новую ревизию, выполнить preview и проверить корпус. Изменить максимум с 30 на 60, создать второй run, сравнить сводки и открыть старые источники. Состояние демо сохраняется в отдельном versioned localStorage; dev-панель позволяет явно его сбросить.
-
-## Сборка и проверки
+## Проверки
 
 ```powershell
 npm run verify
 npm run format:check
-npm run test:repository
-npm run test:e2e:mock
-npm run test:e2e:production
-npm run test:e2e:browsers -- --project=chromium --project=webkit
 npm run api:generate
 npm run api:check
-npm run test:e2e:api
+$env:MADRIGAL_GATEWAY_URL = 'http://127.0.0.1:8080'
+# При необходимости: $env:MADRIGAL_BROWSER_CHANNEL = 'msedge'
+npm run test:e2e:integration
 ```
 
-Последние три команды требуют согласованного контракта и запущенного окружения. `verify` выполняет typecheck, lint, проверки состава репозитория, unit/component-тесты и API production build. `test:e2e:mock` запускает dev-server автоматически; `test:e2e:production` собирает и проверяет `dist` через локальный preview. `npm run test:visual` повторяет экраны/axe. HTML-отчёты — `playwright-report/`, `playwright-report-browsers/` и `playwright-report-production/`; скриншоты — `docs/frontend/screenshots/`, метрики — `docs/frontend/metrics.json`.
+Для Chromium установить браузер через `npx playwright install chromium`; Edge можно использовать через указанную переменную. Интеграционный тест требует работающий Gateway, разрешающий `http://localhost:5173`; Vite он запускает самостоятельно. MSW и подмена HTTP отключены. Тест создаёт собственные проекты, проверяет все 36 операций клиента, отчёт и перенос ZIP в тот же сервер, затем открывает production-интерфейс Gateway.
 
-Для дополнительных движков выполнить `npx playwright install chromium firefox webkit`. Полный `npm run test:e2e:browsers` содержит Chromium, Firefox и WebKit. В этой Windows-среде Firefox ранее не запускался после повторной установки (ошибка SideBySide/spawn до открытия страницы); успешная проверка этого движка не подтверждена. Актуальные результаты приведены в [verification.md](docs/frontend/verification.md). Не запускайте два Playwright процесса с одним outputDir/HTML report одновременно.
+Существующие mock E2E доступны через `npm run test:e2e:mock`. Читающая API-проверка существующего проекта — `npm run test:e2e:api`; ей нужны `MADRIGAL_PROJECT_ID`, `MADRIGAL_RUN_ID` и `MADRIGAL_SOURCE_LINK`. Отчёты и трассы сохраняются в игнорируемом `test-results/`.
 
-`npm run build` → `dist/`, public base `/`. Страницы и CodeMirror загружаются отдельными chunks. Gateway должен отдавать `index.html` для SPA-маршрутов, а ошибки API — своим HTTP/JSON-ответом. Production очистка удаляет worker и demo ZIP; тест проверяет отсутствие fixture-корпуса в JS. `npm run build:mock` — отдельная явно демонстрационная сборка, не поставка реального API. Оба варианта пишут `dist`, поэтому для передачи production выполняется `npm run build` последним.
+`npm run build` создаёт API production build и удаляет demo worker/архив. Страницы и редактор загружаются отдельными chunks. Gateway отдаёт SPA для экранов, JSON для ошибок API и 404 для отсутствующих assets.
 
-## Работа без внешнего интернета
-
-Готовый `dist` не использует CDN, внешние шрифты, аналитику или внешние API. Его раздаёт локальный Gateway; браузер и локальный Gateway должны оставаться доступны. Проверки блокируют внешние origins, сохраняя localhost. Полное `offline=true` для этого сценария не подходит.
-
-Для разработки/тестов заранее на той же ОС/архитектуре установить Node и пакеты (`npm ci`), Chromium (`npx playwright install chromium`) и необходимые системные библиотеки браузера. Сохранить npm-cache (`npm config get cache`) и Playwright browser-cache; путь можно закрепить переменной `PLAYWRIGHT_BROWSERS_PATH` при подготовке и использовать тот же при запуске. При подготовленном npm-cache повторная установка: `npm ci --offline --cache <подготовленный-каталог>`. Эта команда требует полного кеша, а не одного lockfile. На Linux системные зависимости Chromium также должны быть установлены заранее. Здесь проверены локальные assets Windows-сборки; офлайн-поставка Docker/backend и Linux INT-04 относятся к владельцам интеграции.
-
-## Границы демо
-
-Подготовленный Analysis-корпус относится к направлению A→B первого поколения. Другое направление/поколение и технический precision fixture можно исследовать в HEX, но они не получают выдуманный preview/run: показан DEMO_LIMITATION. Precision служит для проверки координат и нагрузки.
-
-Текущий corpus v2 использует отдельные capture IDs с суффиксом fixture2. В первом TCP-примере второй участок кадра 8 продолжается в frameOffset 68. Сохранённые данные v1 переносятся без изменения старых кадров; прежний неполный корпус помечен. Технические captures «Большой исходный кадр» и «Много источников» проверяют raw frame 65 536 байт и 125 источников с ограниченным DOM; Analysis для них явно ограничен. Окно потока остаётся 4096 байт, независимо от размера raw frame.
-
-MSW — временный frontend-контракт, не TCP-движок. Принимаются только два точных синтетических capture-файла до 64 КиБ. Произвольные PCAP/PCAPNG, новые сборки и неподдерживаемые параметры схемы получают `DEMO_LIMITATION`. Подготовленный разбор поддерживает фиксированные сообщения по 4 байта, uint32 little endian и порог 30/60; JSON сохраняется точно, включая расширения, но произвольная модель AN-03 ещё не известна.
-
-Demo CSV ограничен простым UTF-8 форматом выше; ZIP переносит снимок внутри того же browser demo-state и не является независимым архивом для другой машины. Markdown содержит manifest/снимок исследования и пометку демо. Реальные хеши, перенос, повторный анализ и CLI AN-16 не подтверждены. CLI показан как недоступный, команда не выдумана. Большие координаты и 1000 сессий проверены лениво; это не общесистемная приёмка Linux 4 vCPU/8 ГиБ, 100 МиБ/250000 пакетов/100000 сообщений.
-
-## Работа в репозитории
-
-Frontend находится в ветке `frontend/app` общего репозитория. Список задач и зависимостей сохранён в [requirements.md](docs/frontend/requirements.md). Все запросы проходят через `src/shared/api`; публичные пути настраиваются в `src/shared/api/contracts/gateway-mapping.json`. Исторические ревизии и сборки сохраняют свои идентификаторы, большие координаты передаются десятичными строками.
-
-`npm run test:repository` проверяет исключение секретов, реальных PCAP/PCAPNG, зависимостей, сборок и результатов тестов из Git, а также доступность локальных ссылок в документации. В Git остаются безопасные `.env.api`/`.env.mock`, подготовленный синтетический demo ZIP, исходники, тесты и документация. Логи, PNG и метрики создаются локально. Секреты нельзя помещать в `VITE_*`, эти значения доступны в браузере.
+История исходной frontend-ветки и её требований сохранена в [requirements](docs/frontend/requirements.md), [progress](docs/frontend/progress.md) и [verification](docs/frontend/verification.md). Старые приёмочные отчёты относятся к указанным в них датам и mock-окружению.

@@ -9,7 +9,7 @@ import { useProject } from '../app/Shell';
 import { config } from '../app/config';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
-import type { Interpretation, Location, Revision } from '../shared/api/contracts/draft';
+import type { Interpretation, Location, Revision } from '../shared/api/contracts/models';
 import { readLocation, sourceLink } from '../shared/model/navigation';
 import { editJsonValue, formatJsonText } from '../shared/model/json-text';
 import { integerInput } from '../shared/model/validation';
@@ -26,10 +26,11 @@ import {
 } from '../shared/ui/common';
 import { RangePicker } from '../shared/ui/RangePicker';
 import { ResultsTable } from '../features/interpretations/Results';
+import { SchemaFields } from '../features/interpretations/SchemaFields';
 const defaultDraft =
   import.meta.env.DEV && config.mode === 'mock'
     ? '{\n  "format": "madrigal-demo-v1",\n  "framing": { "kind": "fixed", "length": 4 },\n  "endian": "little",\n  "scope": { "direction": "A_TO_B" },\n  "fields": [{ "id": "setpoint", "name": "value", "type": "uint32", "offset": "0" }],\n  "rules": [{ "id": "value-bound", "field": "value", "maximum": "30" }]\n}'
-    : '{}';
+    : '{\n  "framing": { "fixedLength": 4 },\n  "fields": [{ "name": "value", "type": "uint32le" }],\n  "checks": [{ "id": "value-bound", "field": "value", "op": "range", "max": 30 }]\n}';
 const extensions = [
   jsonLanguage(),
   EditorView.contentAttributes.of({ 'aria-label': 'JSON схемы' }),
@@ -249,6 +250,19 @@ function EditorWorkspace({
           </Button>
         }
       />
+      <section className="panel guide-intro">
+        <h2>Как читать эту схему</h2>
+        <p>
+          <code>framing</code> задаёт границы сообщений, <code>fields</code> — поля внутри каждого
+          сообщения, <code>checks</code> — правила их проверки. <code>name</code> — имя поля,{' '}
+          <code>type</code> — способ чтения, <code>offset</code> — позиция внутри сообщения от 0.
+        </p>
+        <p>
+          Сначала проверь небольшой участок через «Предварительный разбор» внизу страницы. Затем
+          запусти проверку на других записях.{' '}
+          <Link to={'/projects/' + projectId + '/guide#fields'}>Показать пример →</Link>
+        </p>
+      </section>
       <div className="context-line">
         <code>{interpretation.interpretationId}</code>
         <span>
@@ -307,131 +321,139 @@ function EditorWorkspace({
           {save.error && <ErrorState error={save.error} />}
         </section>
         <aside className="panel editor-basics">
-          <div className="panel-heading">
-            <h2>Основные настройки</h2>
-          </div>
-          <Banner>
-            Формы относятся к временному frontend-формату. Поддержка AN-03 ожидает согласования.
-          </Banner>
-          <Field label="Порядок байтов" error={problems.endian}>
-            {(id) => (
-              <select
-                id={id}
-                disabled={!basic}
-                value={typeof parsed?.endian === 'string' ? parsed.endian : ''}
-                onChange={(event) => updateBasic('endian', event.target.value)}
-              >
-                {parsed?.endian !== 'little' && parsed?.endian !== 'big' && (
-                  <option value={String(parsed?.endian ?? '')} disabled>
-                    Выберите порядок байтов
-                  </option>
+          {basic ? (
+            <>
+              <div className="panel-heading">
+                <h2>Основные настройки</h2>
+              </div>
+              <Banner>
+                Настройки демонстрационной схемы. Изменения формы сохраняются в JSON слева.
+              </Banner>
+              <Field label="Порядок байтов" error={problems.endian}>
+                {(id) => (
+                  <select
+                    id={id}
+                    disabled={!basic}
+                    value={typeof parsed?.endian === 'string' ? parsed.endian : ''}
+                    onChange={(event) => updateBasic('endian', event.target.value)}
+                  >
+                    {parsed?.endian !== 'little' && parsed?.endian !== 'big' && (
+                      <option value={String(parsed?.endian ?? '')} disabled>
+                        Выберите порядок байтов
+                      </option>
+                    )}
+                    <option value="little">Little endian</option>
+                    <option value="big">Big endian</option>
+                  </select>
                 )}
-                <option value="little">Little endian</option>
-                <option value="big">Big endian</option>
-              </select>
-            )}
-          </Field>
-          <Field
-            label="Размер сообщения, байт"
-            hint="Целое число от 1 до 4096; поле uint32 должно помещаться в сообщение."
-            error={problems['framing.length']}
-          >
-            {(id) => (
-              <input
-                id={id}
-                inputMode="numeric"
-                disabled={!fixed}
-                value={
-                  parsed?.framing &&
-                  typeof parsed.framing === 'object' &&
-                  'length' in parsed.framing
-                    ? String(parsed.framing.length)
-                    : ''
-                }
-                onChange={(event) => {
-                  const length = integerInput(event.target.value, {
-                    positive: true,
-                    maximum: 4096n,
-                  });
-                  setDraft(
-                    editJsonValue(
-                      draft,
-                      ['framing', 'length'],
-                      length.value !== undefined ? Number(length.value) : event.target.value,
-                    ),
-                  );
-                }}
-              />
-            )}
-          </Field>
-          <Field label="Область действия" error={problems['scope.direction']}>
-            {(id) => (
-              <select
-                id={id}
-                disabled={!parsed}
-                value={scopeDirection}
-                onChange={(event) =>
-                  setDraft(editJsonValue(draft, ['scope', 'direction'], event.target.value))
-                }
+              </Field>
+              <Field
+                label="Размер сообщения, байт"
+                hint="Целое число от 1 до 4096; поле uint32 должно помещаться в сообщение."
+                error={problems['framing.length']}
               >
-                {!['A_TO_B', 'B_TO_A'].includes(scopeDirection) && (
-                  <option value={scopeDirection} disabled>
-                    Выберите направление
-                  </option>
+                {(id) => (
+                  <input
+                    id={id}
+                    inputMode="numeric"
+                    disabled={!fixed}
+                    value={
+                      parsed?.framing &&
+                      typeof parsed.framing === 'object' &&
+                      'length' in parsed.framing
+                        ? String(parsed.framing.length)
+                        : ''
+                    }
+                    onChange={(event) => {
+                      const length = integerInput(event.target.value, {
+                        positive: true,
+                        maximum: 4096n,
+                      });
+                      setDraft(
+                        editJsonValue(
+                          draft,
+                          ['framing', 'length'],
+                          length.value !== undefined ? Number(length.value) : event.target.value,
+                        ),
+                      );
+                    }}
+                  />
                 )}
-                <option value="A_TO_B">A → B</option>
-                <option value="B_TO_A">B → A</option>
-              </select>
-            )}
-          </Field>
-          <Field
-            label="Имя первого поля"
-            hint="Непустое уникальное имя, до 120 символов. Связанные правила используют то же имя."
-            error={problems['fields.0.name']}
-          >
-            {(id) => (
-              <input
-                id={id}
-                disabled={!basic || !field}
-                value={String(field?.name ?? '')}
-                maxLength={120}
-                onChange={(event) => updateFirst('fields', { name: event.target.value })}
-              />
-            )}
-          </Field>
-          <Field label="Тип поля">
-            {(id) => <input id={id} readOnly value={String(field?.type ?? 'Не предоставлен')} />}
-          </Field>
-          <Field
-            label="Смещение поля в сообщении"
-            hint="Целое смещение от начала сообщения, начиная с 0; uint32 занимает 4 байта."
-            error={problems['fields.0.offset']}
-          >
-            {(id) => (
-              <input
-                id={id}
-                inputMode="numeric"
-                disabled={!basic || field?.type !== 'uint32'}
-                value={String(field?.offset ?? '')}
-                onChange={(event) => updateFirst('fields', { offset: event.target.value })}
-              />
-            )}
-          </Field>
-          <Field
-            label="Максимум первого правила"
-            hint="Целое значение от 0 до 4 294 967 295 для поля uint32."
-            error={problems['rules.0.maximum']}
-          >
-            {(id) => (
-              <input
-                id={id}
-                inputMode="numeric"
-                disabled={!basic || !rule}
-                value={String(rule?.maximum ?? '')}
-                onChange={(event) => updateFirst('rules', { maximum: event.target.value })}
-              />
-            )}
-          </Field>
+              </Field>
+              <Field label="Область действия" error={problems['scope.direction']}>
+                {(id) => (
+                  <select
+                    id={id}
+                    disabled={!parsed}
+                    value={scopeDirection}
+                    onChange={(event) =>
+                      setDraft(editJsonValue(draft, ['scope', 'direction'], event.target.value))
+                    }
+                  >
+                    {!['A_TO_B', 'B_TO_A'].includes(scopeDirection) && (
+                      <option value={scopeDirection} disabled>
+                        Выберите направление
+                      </option>
+                    )}
+                    <option value="A_TO_B">A → B</option>
+                    <option value="B_TO_A">B → A</option>
+                  </select>
+                )}
+              </Field>
+              <Field
+                label="Имя первого поля"
+                hint="Непустое уникальное имя, до 120 символов. Связанные правила используют то же имя."
+                error={problems['fields.0.name']}
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    disabled={!basic || !field}
+                    value={String(field?.name ?? '')}
+                    maxLength={120}
+                    onChange={(event) => updateFirst('fields', { name: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Field label="Тип поля">
+                {(id) => (
+                  <input id={id} readOnly value={String(field?.type ?? 'Не предоставлен')} />
+                )}
+              </Field>
+              <Field
+                label="Смещение поля в сообщении"
+                hint="Целое смещение от начала сообщения, начиная с 0; uint32 занимает 4 байта."
+                error={problems['fields.0.offset']}
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    inputMode="numeric"
+                    disabled={!basic || field?.type !== 'uint32'}
+                    value={String(field?.offset ?? '')}
+                    onChange={(event) => updateFirst('fields', { offset: event.target.value })}
+                  />
+                )}
+              </Field>
+              <Field
+                label="Максимум первого правила"
+                hint="Целое значение от 0 до 4 294 967 295 для поля uint32."
+                error={problems['rules.0.maximum']}
+              >
+                {(id) => (
+                  <input
+                    id={id}
+                    inputMode="numeric"
+                    disabled={!basic || !rule}
+                    value={String(rule?.maximum ?? '')}
+                    onChange={(event) => updateFirst('rules', { maximum: event.target.value })}
+                  />
+                )}
+              </Field>
+            </>
+          ) : (
+            <SchemaFields draft={draft} parsed={parsed} projectId={projectId} onChange={setDraft} />
+          )}
           <h3>История ревизий</h3>
           <div className="revision-list">
             {interpretation.revisions.map((item) => (

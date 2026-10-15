@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { ByteWindow, Location } from '../../shared/api/contracts/draft';
+import type { ByteWindow, Location } from '../../shared/api/contracts/models';
 import { boundedIndex, decimal, hexOffset } from '../../shared/model/precision';
 import { byteAscii, byteHex, cellAt, copyKnown } from '../../shared/model/bytes';
 import { Banner, Button } from '../../shared/ui/common';
@@ -29,12 +29,18 @@ export function HexViewer({
   selection,
   onSelect,
   onWindow,
+  annotations = [],
 }: {
   window: ByteWindow;
   selection: Location;
   onSelect: (start: string, length: string, windowStart?: string) => void;
   onWindow: (start: string) => void;
+  annotations?: { start: string; length: string; label: string }[];
 }) {
+  const annotationAt = (offset: bigint) =>
+    annotations.find(
+      (item) => offset >= BigInt(item.start) && offset < BigInt(item.start) + BigInt(item.length),
+    );
   const scroll = useRef<HTMLDivElement>(null);
   const header = useRef<HTMLDivElement>(null);
   const drag = useRef(false);
@@ -245,7 +251,12 @@ export function HexViewer({
                       aria-label={'Байт ' + offset + ': ' + byteHex(cell)}
                       key={String(offset)}
                       data-offset={String(offset)}
-                      title={cell.kind === 'known' ? String(offset) : cell.reason}
+                      data-candidate={cell.kind === 'known' && !!annotationAt(offset)}
+                      title={
+                        cell.kind === 'known'
+                          ? (annotationAt(offset)?.label ?? String(offset))
+                          : cell.reason
+                      }
                       className={
                         'hex-byte ' +
                         cell.kind +

@@ -321,7 +321,7 @@ func (store Store) RestoreTables(ctx context.Context, projectID, importID, manif
 			return nil, err
 		}
 	}
-	result := map[string]any{"importId": importID, "status": "READY", "captureIds": maps["captures"], "assemblyIds": maps["assemblies"], "streamIds": maps["streams"], "sessionIds": maps["sessions"]}
+	result := map[string]any{"importId": importID, "status": "READY", "captureIds": maps["captures"], "assemblyIds": maps["assemblies"], "streamIds": maps["streams"], "sessionIds": maps["sessions"], "alternativeIds": maps["interval_alternatives"]}
 	encoded, _ := json.Marshal(result)
 	if _, err = tx.ExecContext(ctx, "UPDATE imports SET status='READY',result_json=?3,updated_at=(strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE project_id=?1 AND import_id=?2", projectID, importID, string(encoded)); err != nil {
 		return nil, err

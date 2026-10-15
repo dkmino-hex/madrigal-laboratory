@@ -2,13 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import type { Location, Source } from '../../shared/api/contracts/draft';
+import type { Location, Source } from '../../shared/api/contracts/models';
 import { api } from '../../shared/api/client';
 import { ApiError } from '../../shared/api/transport';
 import { queryKey } from '../../shared/api/query';
 import { decimal, formatTimestamp } from '../../shared/model/precision';
-import { sourceLink } from '../../shared/model/navigation';
+import { safeReturnPath, sourceLink } from '../../shared/model/navigation';
 import { CopyButton, Empty, Pagination, QueryState } from '../../shared/ui/common';
+import { config } from '../../app/config';
+import { ObserveSelection } from '../observations/ObserveSelection';
 function PacketHex({ bytes, source }: { bytes: number[]; source: Source }) {
   const scroll = useRef<HTMLDivElement>(null);
   const [columns, setColumns] = useState(8);
@@ -181,6 +183,23 @@ export function SourceInspector({
     enabled: BigInt(location.length) > 0n,
   });
   const link = sourceLink(location, { runId, revisionId });
+  const actionPath = '/projects/' + encodeURIComponent(location.projectId) + '/actions';
+  const returnPath = safeReturnPath(
+    new URLSearchParams(current.search).get('returnTo'),
+    location.projectId,
+  );
+  const returnUrl = returnPath ? new URL(returnPath, window.location.origin) : null;
+  const actionParams =
+    returnUrl?.pathname === actionPath
+      ? new URLSearchParams(returnUrl.search)
+      : new URLSearchParams();
+  const trafficParams = new URLSearchParams(current.search);
+  trafficParams.delete('returnTo');
+  actionParams.set('source', link);
+  actionParams.set(
+    'returnTo',
+    current.pathname + (trafficParams.size ? '?' + trafficParams.toString() : ''),
+  );
   return (
     <div className="source-inspector">
       <div className="panel-heading">
@@ -237,20 +256,17 @@ export function SourceInspector({
           )}
         </QueryState>
       )}
-      <Link
-        className="button ghost"
-        to={
-          '/projects/' +
-          location.projectId +
-          '/actions?' +
-          new URLSearchParams({
-            source: link,
-            returnTo: current.pathname + current.search,
-          }).toString()
-        }
-      >
+      <Link className="button ghost" to={actionPath + '?' + actionParams.toString()}>
         Связать с действием журнала
       </Link>
+      {config.mode === 'api' && query.data && (
+        <ObserveSelection
+          location={location}
+          sources={query.data}
+          revisionId={revisionId}
+          runId={runId}
+        />
+      )}
       <Link
         className="button ghost"
         to={

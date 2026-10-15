@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import type { Result } from '../../shared/api/contracts/draft';
+import type { Result } from '../../shared/api/contracts/models';
 import { sourceLink } from '../../shared/model/navigation';
 import { Badge } from '../../shared/ui/common';
 export function ResultsTable({

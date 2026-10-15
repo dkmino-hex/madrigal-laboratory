@@ -2,7 +2,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useSyncExternalStore } from 'react';
 import { api } from '../../shared/api/client';
 import { queryKey, useCommand } from '../../shared/api/query';
-import type { Job } from '../../shared/api/contracts/draft';
+import type { Job } from '../../shared/api/contracts/models';
 import { config } from '../../app/config';
 import { readPreference, savePreference } from '../../shared/lib/storage';
 import { Badge, Button, Empty, ErrorState, Loading } from '../../shared/ui/common';
@@ -59,6 +59,7 @@ export function JobCard({ projectId, jobId }: Tracked) {
       'sessions',
       'assemblies',
       'artifacts',
+      'actions',
       'runs',
       'run',
       'results',

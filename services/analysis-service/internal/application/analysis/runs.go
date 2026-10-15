@@ -29,58 +29,25 @@ func NewRunsService(repo Repository, client Capture) *RunsService {
 	return &RunsService{Repo: repo, Capture: client, semaphore: make(chan struct{}, 2), ctx: ctx, cancel: cancel}
 }
 func (s *RunsService) Start(ctx context.Context, project string, in domain.RunInput, key string) (domain.Run, error) {
-	if project == "" || in.RevisionID == "" || in.AssemblyID == "" {
+	if project == "" || in.RevisionID == "" || in.AssemblyID == "" && len(in.Corpus) == 0 {
 		return domain.Run{}, fmt.Errorf("%w: projectId, revisionId and assemblyId required", ErrInvalidInput)
 	}
 	if _, err := s.Repo.SchemaByRevision(ctx, project, in.RevisionID); err != nil {
 		return domain.Run{}, err
 	}
-	// Resolve and pin real Capture metadata; never trust a client-supplied version.
-	capMeta, assemblyMeta, err := s.Capture.Assembly(ctx, project, in.AssemblyID)
-	if err != nil {
+	if !validKey(key) {
+		return domain.Run{}, ErrInvalidInput
+	}
+	if err := s.pin(ctx, project, &in); err != nil {
 		return domain.Run{}, err
 	}
-	if assemblyMeta.Status != "READY" || capMeta.Status != "READY" {
-		return domain.Run{}, fmt.Errorf("%w: Capture assembly not READY", ErrInvalidInput)
-	}
-	if in.CaptureID != "" && in.CaptureID != capMeta.CaptureID {
-		return domain.Run{}, fmt.Errorf("%w: captureId does not match assembly", ErrInvalidInput)
-	}
-	if in.SettingsVersion != "" && in.SettingsVersion != assemblyMeta.SettingsVersion {
-		return domain.Run{}, fmt.Errorf("%w: settingsVersion does not match assembly", ErrInvalidInput)
-	}
-	in.CaptureID = capMeta.CaptureID
-	in.SettingsVersion = assemblyMeta.SettingsVersion
-	in.CaptureSHA256 = capMeta.SHA256
-	in.CaptureEngineVersion = assemblyMeta.EngineVersion
-	in.SettingsJSON = "{}"
-	if s.Workspace != nil {
-		settings, e := s.Workspace.Get(ctx, project, assemblyMeta.SettingsVersion)
-		if e != nil {
-			return domain.Run{}, e
-		}
-		if settings.Status != "READY" || settings.SettingsVersion != assemblyMeta.SettingsVersion {
-			return domain.Run{}, fmt.Errorf("%w: Workspace settings not READY", ErrInvalidInput)
-		}
-		in.SettingsJSON = string(settings.Settings)
-	}
-	streams, err := s.Capture.Streams(ctx, project, in.AssemblyID)
-	if err != nil {
-		return domain.Run{}, err
-	}
-	ranges := domain.Split(in.AssemblyID, streams)
-	manifest, err := json.Marshal(map[string]any{"captureId": in.CaptureID, "captureSha256": in.CaptureSHA256, "assemblyId": in.AssemblyID, "captureEngineVersion": in.CaptureEngineVersion, "settingsVersion": in.SettingsVersion, "settings": json.RawMessage(in.SettingsJSON), "ranges": ranges, "filters": in.Filters})
-	if err != nil {
-		return domain.Run{}, err
-	}
-	in.InputManifestJSON = string(manifest)
 	run, existing, err := s.Repo.CreateRun(ctx, project, in, key)
 	if err != nil {
 		return domain.Run{}, err
 	}
 	if existing {
 		if run.RevisionID != in.RevisionID || run.AssemblyID != in.AssemblyID || run.CaptureID != in.CaptureID || run.SettingsVersion != in.SettingsVersion || run.InputManifestJSON != in.InputManifestJSON {
-			return domain.Run{}, fmt.Errorf("%w: idempotency key used with different request", ErrInvalidInput)
+			return domain.Run{}, fmt.Errorf("%w: idempotency key used with different request", domain.ErrConflict)
 		}
 		return run, nil
 	}
@@ -133,17 +100,35 @@ func (s *RunsService) process(ctx context.Context, run domain.Run) error {
 	if err != nil {
 		return err
 	}
-	streams, err := s.Capture.Streams(ctx, run.ProjectID, run.AssemblyID)
-	if err != nil {
+	var manifest inputManifest
+	if err = json.Unmarshal([]byte(run.InputManifestJSON), &manifest); err != nil {
 		return err
 	}
-	ranges := domain.Split(run.AssemblyID, streams)
+	ranges := manifest.Ranges
+	if len(ranges) == 0 {
+		streams, err := s.Capture.Streams(ctx, run.ProjectID, run.AssemblyID)
+		if err != nil {
+			return err
+		}
+		ranges = domain.Split(run.AssemblyID, streams)
+	}
 	if len(ranges) == 0 {
 		return fmt.Errorf("no stream bytes in selected assembly")
 	}
 	_ = s.Repo.ProgressJob(ctx, run.JobID, 0, len(ranges))
-	var fields, diagnostics, blocksCount int
-	for i := 0; i < len(ranges); i += 256 {
+	var fields, diagnostics, blocksCount, messages int
+	var known, unknown uint64
+	rules := map[string]int{"PASS": 0, "FAIL": 0, "INCONCLUSIVE": 0, "NOT_APPLICABLE": 0, "UNKNOWN": 0}
+	messageStatuses := map[string]int{"PASS": 0, "FAIL": 0, "INCONCLUSIVE": 0, "NOT_APPLICABLE": 0, "UNKNOWN": 0}
+	captures, streams := map[string]bool{}, map[string]bool{}
+	for _, entry := range manifest.Corpus {
+		captures[entry.CaptureID] = true
+	}
+	for _, r := range ranges {
+		streams[r.StreamID] = true
+	}
+	matcher := actionMatcher(manifest.ActionSnapshot)
+	for i := 0; i < len(ranges); i += 4 {
 		cancelled, e := s.Repo.JobCancelRequested(ctx, run.JobID)
 		if e != nil {
 			return e
@@ -151,7 +136,7 @@ func (s *RunsService) process(ctx context.Context, run domain.Run) error {
 		if cancelled {
 			return fmt.Errorf("job cancelled")
 		}
-		end := i + 256
+		end := i + 4
 		if end > len(ranges) {
 			end = len(ranges)
 		}
@@ -159,7 +144,7 @@ func (s *RunsService) process(ctx context.Context, run domain.Run) error {
 		if e != nil {
 			return e
 		}
-		parsed, e := engine.Parse(schema, blocks)
+		parsed, e := engine.Parse(schema, blocks, matcher)
 		if e != nil {
 			return e
 		}
@@ -170,12 +155,22 @@ func (s *RunsService) process(ctx context.Context, run domain.Run) error {
 		if e = s.Repo.SaveResult(ctx, run.RunID, string(payload)); e != nil {
 			return e
 		}
+		messages += len(parsed.Messages)
+		for _, message := range parsed.Messages {
+			messageStatuses[message.Status]++
+		}
+		k, u := coverage(blocks, parsed.UnknownRegions)
+		known += k
+		unknown += u
+		for _, check := range parsed.Checks {
+			rules[check.Status]++
+		}
 		fields += len(parsed.Fields)
 		diagnostics += len(parsed.Errors)
 		blocksCount += len(blocks)
 		_ = s.Repo.ProgressJob(ctx, run.JobID, end, len(ranges))
 	}
-	summary, _ := json.Marshal(map[string]any{"fields": fields, "diagnostics": diagnostics, "blocks": blocksCount, "streams": len(streams)})
+	summary, _ := json.Marshal(map[string]any{"fields": fields, "diagnostics": diagnostics, "blocks": blocksCount, "streams": len(streams), "messages": fmt.Sprint(messages), "messageStatuses": messageStatuses, "knownBytes": fmt.Sprint(known), "unknownBytes": fmt.Sprint(unknown), "captures": fmt.Sprint(len(captures)), "sessions": fmt.Sprint(len(manifest.Sessions)), "rules": rules, "complete": true})
 	return s.Repo.SetRunStatus(ctx, run.RunID, "completed", string(summary))
 }
 func (s *RunsService) Wait() { s.wg.Wait() }

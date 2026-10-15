@@ -67,11 +67,13 @@ func (h *SnapshotHandler) Import(w http.ResponseWriter, r *http.Request) {
 	assemblies, e2 := parseMap(r.Header.Get("X-Assembly-Id-Map"))
 	streams, e3 := parseMap(r.Header.Get("X-Stream-Id-Map"))
 	settings, e4 := parseMap(r.Header.Get("X-Settings-Version-Map"))
-	if e1 != nil || e2 != nil || e3 != nil || e4 != nil {
+	sessions, e5 := parseMap(r.Header.Get("X-Session-Id-Map"))
+	alternatives, e6 := parseMap(r.Header.Get("X-Alternative-Id-Map"))
+	if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || e6 != nil {
 		writeJSON(w, 400, map[string]string{"code": "BAD_REQUEST", "message": "invalid ID mapping headers"})
 		return
 	}
-	err = h.snapshots.Restore(r.Context(), r.PathValue("projectId"), r.PathValue("importId"), body, service.RestoreMaps{Captures: captures, Assemblies: assemblies, Streams: streams, Settings: settings})
+	err = h.snapshots.Restore(r.Context(), r.PathValue("projectId"), r.PathValue("importId"), body, service.RestoreMaps{Captures: captures, Assemblies: assemblies, Streams: streams, Settings: settings, Sessions: sessions, Alternatives: alternatives})
 	switch {
 	case errors.Is(err, service.ErrInvalidArchive):
 		writeJSON(w, 400, map[string]string{"code": "BAD_REQUEST", "message": strings.TrimPrefix(err.Error(), service.ErrInvalidArchive.Error()+": ")})
@@ -80,6 +82,11 @@ func (h *SnapshotHandler) Import(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		analysisError(w, err)
 	default:
-		writeJSON(w, 200, map[string]string{"status": "READY"})
+		maps, err := h.snapshots.Mappings(r.Context(), r.PathValue("projectId"), r.PathValue("importId"))
+		if err != nil {
+			analysisError(w, err)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"status": "READY", "interpretationIds": maps["interpretationId"], "revisionIds": maps["revisionId"], "runIds": maps["runId"]})
 	}
 }

@@ -4,7 +4,7 @@ import { useProject } from '../app/Shell';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
 import { MoreChoices, usePagedChoices } from '../shared/api/paged-choices';
-import type { Artifact } from '../shared/api/contracts/draft';
+import type { Artifact } from '../shared/api/contracts/models';
 import { DownloadLink } from '../shared/ui/DownloadLink';
 import {
   Badge,

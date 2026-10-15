@@ -66,7 +66,11 @@ func (s Store) ImportJob(ctx context.Context, j jobs.Job, progress func(string, 
 		return err
 	}
 	assemblyID := identifier.New("assembly")
-	sessions := reassembly.BuildSessions(c.ID, assemblyID, packets)
+	policy, err := checksumPolicy(payload.Settings)
+	if err != nil {
+		return err
+	}
+	sessions := reassembly.BuildSessions(c.ID, assemblyID, packets, policy)
 	return s.SaveImport(ctx, j, c, payload.SettingsVersion, payload.Settings, assemblyID, packets, sessions)
 }
 
@@ -81,6 +85,30 @@ func (s Store) AssembleJob(ctx context.Context, j jobs.Job, progress func(string
 	if err := progress("ASSEMBLING", 0, nil); err != nil {
 		return err
 	}
-	sessions := reassembly.BuildSessions(captureID, *j.ResourceID, packets)
+	settings, err := s.AssemblySettings(ctx, j.ProjectID, *j.ResourceID)
+	if err != nil {
+		return err
+	}
+	policy, err := checksumPolicy(settings)
+	if err != nil {
+		return err
+	}
+	sessions := reassembly.BuildSessions(captureID, *j.ResourceID, packets, policy)
 	return s.SaveAssembly(ctx, j, captureID, packets, sessions)
+}
+
+func checksumPolicy(settings json.RawMessage) (string, error) {
+	var input struct {
+		Checksum string `json:"checksum"`
+	}
+	if err := json.Unmarshal(settings, &input); err != nil {
+		return "", err
+	}
+	if input.Checksum == "" {
+		return "warn", nil
+	}
+	if input.Checksum != "warn" && input.Checksum != "strict" && input.Checksum != "ignore" {
+		return "", errors.New("unsupported checksum policy")
+	}
+	return input.Checksum, nil
 }

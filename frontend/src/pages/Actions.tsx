@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useProject } from '../app/Shell';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
-import type { Evidence, Location } from '../shared/api/contracts/draft';
+import type { Action, Evidence, Location } from '../shared/api/contracts/models';
 import { UnsavedGuard } from '../shared/lib/use-unsaved';
 import { useBufferedParam } from '../shared/lib/use-buffered-param';
 import { textError, timeRangeInput } from '../shared/model/validation';
@@ -35,6 +35,7 @@ export default function Actions() {
   const to = params.get('to') ?? '';
   const cursor = params.get('cursor') ?? '0';
   const actionId = params.get('actionId') ?? '';
+  const [chosenAction, setChosenAction] = useState<Action | null>(null);
   const evidenceCursor = params.get('evidenceCursor') ?? '0';
   const timeRange = timeRangeInput(from, to);
   const timeError = timeRange.fromError ?? timeRange.toError;
@@ -77,6 +78,9 @@ export default function Actions() {
   const editBasisProblem = textError(editBasis, 'основание связи', 4000, false);
   const [editStatus, setEditStatus] = useState<Evidence['status']>('tentative');
   const [discardEdit, setDiscardEdit] = useState(false);
+  const selectedAction =
+    actions.data?.items.find((item) => item.actionId === actionId) ??
+    (chosenAction?.actionId === actionId ? chosenAction : null);
   const editDirty = !!editing && (editBasis !== editing.basis || editStatus !== editing.status);
   const save = useCommand(
     'saveEvidence',
@@ -98,17 +102,33 @@ export default function Actions() {
       />
       <PageHeading
         title="Журнал действий"
-        subtitle="Названия и параметры происходят из журнала, время относится к наблюдению."
+        subtitle="Что ты делал с устройством и в какое время. Эти сведения импортированы из CSV."
         actions={
           <Modal
             title="Импортировать журнал CSV"
-            description="Ошибки строк и частичный импорт остаются видимыми. Формат CSV уточняется с Workspace."
+            description="Загрузи журнал с временем, названием действия и его параметрами. Ошибки строк будут показаны после обработки."
             trigger={<Button variant="primary">Импортировать CSV</Button>}
           >
             <UploadWidget kind="csv" projectId={projectId} />
           </Modal>
         }
       />
+      <section className="panel guide-intro">
+        <h2>Откуда взялись эти названия?</h2>
+        <p>
+          Названия действий и параметры ниже прочитаны из CSV. Например, <code>period_ms: 200</code>
+          означает, что в журнале записан период 200 мс. Где он находится в пакетах, ещё нужно
+          установить.
+        </p>
+        <p>
+          Выбери действие в таблице. Затем открой его предполагаемые байты в «Обмене и байтах»,
+          выдели участок и нажми «Связать с действием журнала». Вернувшись сюда, проверь выбранное
+          действие, поясни связь и сохрани её.
+        </p>
+        <Link to={'/projects/' + projectId + '/guide#fields'}>
+          Что такое поле и как его искать →
+        </Link>
+      </section>
       <div className="form-grid">
         <Field label="Поиск по действиям">
           {(id) => (
@@ -172,8 +192,8 @@ export default function Actions() {
                   <tr>
                     <th>Действие</th>
                     <th>Время и поправка</th>
-                    <th>Параметры</th>
-                    <th>Источник названия</th>
+                    <th>Параметры из CSV</th>
+                    <th>Строка CSV</th>
                     <th>Связь</th>
                   </tr>
                 </thead>
@@ -206,7 +226,10 @@ export default function Actions() {
                       <td>
                         <Button
                           variant={actionId === action.actionId ? 'primary' : 'secondary'}
-                          onClick={() => filter('actionId', action.actionId)}
+                          onClick={() => {
+                            setChosenAction(action);
+                            filter('actionId', action.actionId);
+                          }}
                           disabled={actions.isFetching || search.pending || typeSearch.pending}
                         >
                           Выбрать действие
@@ -237,8 +260,52 @@ export default function Actions() {
       <section className="panel">
         <div className="panel-heading">
           <h2>Ручная связь с байтами</h2>
-          <code>{actionId || 'Действие не выбрано'}</code>
         </div>
+        {selectedAction ? (
+          <div className="selected-action">
+            <span className="muted">Выбранное действие из журнала</span>
+            <h3>{selectedAction.name}</h3>
+            <p>
+              {formatShiftedTimestamp(selectedAction.timestamp, selectedAction.offsetNanoseconds)}
+            </p>
+            <p>
+              Параметры из CSV: <code>{selectedAction.parameters}</code>
+            </p>
+          </div>
+        ) : (
+          <p>
+            {actionId
+              ? 'Действие выбрано по ссылке; его строка сейчас не показана в таблице.'
+              : 'Сначала нажми «Выбрать действие» в таблице выше.'}
+          </p>
+        )}
+        {actionId && (
+          <details className="technical-details">
+            <summary>ID действия</summary>
+            <code>{actionId}</code>
+          </details>
+        )}
+        <p>
+          Начало и длина ниже задают участок байтов в потоке. Его положение нужно выбрать по записи
+          обмена. Параметры CSV сами по себе не определяют этот участок.
+        </p>
+        <Link
+          className="button secondary"
+          to={
+            location
+              ? sourceLink(location, {
+                  returnTo: '/projects/' + projectId + '/actions?' + params.toString(),
+                })
+              : '/projects/' +
+                projectId +
+                '/traffic?' +
+                new URLSearchParams({
+                  returnTo: '/projects/' + projectId + '/actions?' + params.toString(),
+                }).toString()
+          }
+        >
+          {location ? 'Посмотреть выбранные байты и пакеты' : 'Найти байты в записи обмена'}
+        </Link>
         <Banner>
           «Подтверждено» — оценка исследователя. Совпадение числа и успешный разбор не устанавливают
           причинность.
@@ -262,7 +329,7 @@ export default function Actions() {
         <Field
           label="Основание связи"
           error={basisProblem}
-          hint="Необязательно. Рекомендуется пояснить связь, чтобы её было проще проверить; до 4000 символов."
+          hint="Опиши, почему считаешь эти байты связанными с действием. Необязательно, до 4000 символов."
         >
           {(id) => (
             <textarea
@@ -271,7 +338,7 @@ export default function Actions() {
               disabled={save.isPending}
               onChange={(event) => setBasis(event.target.value)}
               maxLength={4000}
-              placeholder="При желании укажите основание связи"
+              placeholder="Например: после изменения периода с 100 на 200 в этом месте изменились два байта."
             />
           )}
         </Field>
@@ -318,7 +385,10 @@ export default function Actions() {
         {save.data && (
           <Banner tone="success">
             Связь сохранена: {save.data.evidenceId}. Источники закреплены за{' '}
-            {save.data.location.assemblyId}.
+            {save.data.location.assemblyId}.{' '}
+            <Link to={'/projects/' + projectId + '/hypotheses'}>
+              Открыть наблюдения и прикрепить эту связь →
+            </Link>
           </Banner>
         )}
       </section>

@@ -4,7 +4,7 @@ import { config } from '../../app/config';
 import { initialState } from '../../mocks/state';
 import { goldenLocation, goldenSources, schemaText } from '../../mocks/fixtures/corpus';
 import { decimal } from '../model/precision';
-import type { Job } from './contracts/draft';
+import type { Job } from './contracts/models';
 
 beforeEach(() => {
   config.mode = 'mock';

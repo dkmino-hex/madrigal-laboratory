@@ -1,5 +1,6 @@
 import { afterEach, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { gatewayMapping } from './registry';
 import { config } from '../../app/config';
 import { ApiError, decodeResponse, logicalRequest, request, safeArtifactUrl } from './transport';
 afterEach(() => vi.restoreAllMocks());
@@ -46,6 +47,35 @@ it('невалидный JSON диагностируется отдельно', 
       z.string(),
     ),
   ).rejects.toMatchObject({ code: 'INVALID_JSON' }));
+
+it('после multipart загрузки читает задание без тела GET', async () => {
+  config.mode = 'api';
+  const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
+    if (options?.method === 'GET') {
+      expect(options.body).toBeUndefined();
+      return Response.json({
+        jobId: 'cap_upload',
+        projectId: 'project',
+        owner: 'Capture',
+        status: 'QUEUED',
+        stage: 'QUEUED',
+        completed: '0',
+        cancelRequested: false,
+      });
+    }
+    expect(options?.body).toBeInstanceOf(FormData);
+    return Response.json({ jobId: 'cap_upload', duplicate: false }, { status: 202 });
+  });
+  await expect(
+    request(
+      'uploadCapture',
+      { projectId: 'project' },
+      z.object({ job: z.object({ jobId: z.string() }) }),
+      { file: new File(['capture'], 'capture.pcap') },
+    ),
+  ).resolves.toMatchObject({ job: { jobId: 'cap_upload' } });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
 it('один логический запрос сохраняет ключ; другое тело или операция меняет ключ', () => {
   const key = logicalRequest();
   const first = key('createProject', { name: 'a' });
@@ -56,10 +86,13 @@ it('один логический запрос сохраняет ключ; др
 it('отсутствующий API mapping не выполняет выдуманный запрос', async () => {
   config.mode = 'api';
   const fetch = vi.spyOn(globalThis, 'fetch');
+  const prior = gatewayMapping.projects;
+  delete gatewayMapping.projects;
   await expect(request('projects', {}, z.string())).rejects.toMatchObject({
     code: 'CONTRACT_PENDING',
   });
   expect(fetch).not.toHaveBeenCalled();
+  gatewayMapping.projects = prior;
 });
 it('различает сеть и неопределённый результат мутации', async () => {
   config.mode = 'mock';

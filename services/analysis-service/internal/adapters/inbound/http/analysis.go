@@ -39,6 +39,9 @@ func analysisError(w http.ResponseWriter, err error) {
 	case errors.Is(err, service.ErrInvalidInput):
 		code = 400
 		msg = err.Error()
+	case errors.Is(err, domain.ErrConflict):
+		code = 409
+		msg = err.Error()
 	case errors.Is(err, domain.ErrNotFound):
 		code = 404
 		msg = "resource not found"
@@ -115,7 +118,7 @@ func (h *AnalysisHandler) RunsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	if status != "" && !strings.Contains("|pending|running|completed|failed|", "|"+status+"|") {
+	if status != "" && !strings.Contains("|pending|running|completed|failed|cancelled|interrupted|", "|"+status+"|") {
 		writeJSON(w, 400, map[string]string{"code": "BAD_REQUEST", "message": "invalid status"})
 		return
 	}
@@ -166,6 +169,10 @@ func (h *AnalysisHandler) ResultsGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 409, map[string]string{"code": "CONFLICT", "message": "run not completed"})
 		return
 	}
+	if r.URL.Query().Get("view") == "messages" {
+		h.messagesPage(w, r, run, limit, offset)
+		return
+	}
 	raw, e := h.Repo.Results(r.Context(), run.ProjectID, run.RunID)
 	if e != nil {
 		analysisError(w, e)
@@ -176,7 +183,9 @@ func (h *AnalysisHandler) ResultsGet(w http.ResponseWriter, r *http.Request) {
 	counterexamples := []engine.CheckResult{}
 	for _, item := range raw {
 		var result engine.Result
-		if e = json.Unmarshal([]byte(item), &result); e != nil {
+		decoder := json.NewDecoder(strings.NewReader(item))
+		decoder.UseNumber()
+		if e = decoder.Decode(&result); e != nil {
 			analysisError(w, e)
 			return
 		}

@@ -18,44 +18,63 @@ func parseSQLiteTime(value string) (time.Time, error) {
 	return t, nil
 }
 
-func (r *InterpretationRepository) CreateRevision(ctx context.Context, projectID, interpretationID string, revision *domain.Revision) error {
+func (r *InterpretationRepository) CreateRevision(ctx context.Context, projectID, interpretationID string, revision *domain.Revision, keys ...string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin revision transaction: %w", err)
+		return err
 	}
 	defer tx.Rollback()
-
-	// A write first acquires SQLite's write lock. This serializes concurrent version allocation.
-	res, err := tx.ExecContext(ctx, `UPDATE interpretations SET name = name WHERE id = ? AND project_id = ?`, interpretationID, projectID)
+	key, scope := optionalKey(keys), "revisions:"+projectID+":"+interpretationID
+	hash, err := requestHash([]string{revision.SchemaJSON, revision.ChangeComment, revision.ParentRevisionID})
 	if err != nil {
-		return fmt.Errorf("lock interpretation: %w", err)
+		return err
+	}
+	res, err := tx.ExecContext(ctx, "UPDATE interpretations SET name=name WHERE id=? AND project_id=?", interpretationID, projectID)
+	if err != nil {
+		return err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return fmt.Errorf("check interpretation: %w", err)
+		return err
 	}
 	if n == 0 {
 		return domain.ErrNotFound
 	}
-
-	err = tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(version), 0) + 1 FROM revisions WHERE interpretation_id = ?`, interpretationID).Scan(&revision.Version)
+	exists, err := replay(ctx, tx, scope, key, hash, revision)
 	if err != nil {
-		return fmt.Errorf("next revision version: %w", err)
+		return err
+	}
+	if exists {
+		return tx.Commit()
+	}
+	if revision.ParentRevisionID != "" {
+		var belongs int
+		if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM revisions WHERE id=? AND interpretation_id=?", revision.ParentRevisionID, interpretationID).Scan(&belongs); err != nil {
+			return err
+		}
+		if belongs != 1 {
+			return domain.ErrNotFound
+		}
+	}
+	if err = tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(version),0)+1 FROM revisions WHERE interpretation_id=?", interpretationID).Scan(&revision.Version); err != nil {
+		return err
 	}
 	revision.InterpretationID = interpretationID
-	_, err = tx.ExecContext(ctx, `INSERT INTO revisions (id, interpretation_id, version, schema_json) VALUES (?, ?, ?, ?)`, revision.ID, revision.InterpretationID, revision.Version, revision.SchemaJSON)
-	if err != nil {
-		return fmt.Errorf("insert revision: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit revision: %w", err)
+	if _, err = tx.ExecContext(ctx, "INSERT INTO revisions(id,interpretation_id,version,schema_json,change_comment,parent_revision_id) VALUES(?,?,?,?,?,?)", revision.ID, interpretationID, revision.Version, revision.SchemaJSON, revision.ChangeComment, revision.ParentRevisionID); err != nil {
+		return err
 	}
 	var created string
-	if err := r.db.QueryRowContext(ctx, `SELECT created_at FROM revisions WHERE id = ?`, revision.ID).Scan(&created); err != nil {
-		return fmt.Errorf("read revision timestamp: %w", err)
+	if err = tx.QueryRowContext(ctx, "SELECT created_at FROM revisions WHERE id=?", revision.ID).Scan(&created); err != nil {
+		return err
 	}
 	revision.CreatedAt, err = parseSQLiteTime(created)
-	return err
+	if err != nil {
+		return err
+	}
+	if err = remember(ctx, tx, scope, key, hash, revision); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *InterpretationRepository) ListRevisions(ctx context.Context, projectID, interpretationID string, limit, offset int) ([]domain.Revision, bool, error) {
@@ -68,7 +87,7 @@ func (r *InterpretationRepository) ListRevisions(ctx context.Context, projectID,
 		return nil, false, fmt.Errorf("check interpretation: %w", err)
 	}
 
-	rows, err := r.db.QueryContext(ctx, `SELECT r.id, r.interpretation_id, r.version, r.schema_json, r.created_at FROM revisions r JOIN interpretations i ON i.id = r.interpretation_id WHERE i.id = ? AND i.project_id = ? ORDER BY r.version DESC LIMIT ? OFFSET ?`, interpretationID, projectID, limit+1, offset)
+	rows, err := r.db.QueryContext(ctx, `SELECT r.id, r.interpretation_id, r.version, r.schema_json, r.created_at, r.change_comment, r.parent_revision_id FROM revisions r JOIN interpretations i ON i.id = r.interpretation_id WHERE i.id = ? AND i.project_id = ? ORDER BY r.version DESC LIMIT ? OFFSET ?`, interpretationID, projectID, limit+1, offset)
 	if err != nil {
 		return nil, false, fmt.Errorf("list revisions: %w", err)
 	}
@@ -77,7 +96,7 @@ func (r *InterpretationRepository) ListRevisions(ctx context.Context, projectID,
 	for rows.Next() {
 		var rev domain.Revision
 		var created string
-		if err := rows.Scan(&rev.ID, &rev.InterpretationID, &rev.Version, &rev.SchemaJSON, &created); err != nil {
+		if err := rows.Scan(&rev.ID, &rev.InterpretationID, &rev.Version, &rev.SchemaJSON, &created, &rev.ChangeComment, &rev.ParentRevisionID); err != nil {
 			return nil, false, fmt.Errorf("scan revision: %w", err)
 		}
 		rev.CreatedAt, err = parseSQLiteTime(created)
@@ -99,7 +118,7 @@ func (r *InterpretationRepository) ListRevisions(ctx context.Context, projectID,
 func (r *InterpretationRepository) GetRevision(ctx context.Context, projectID, interpretationID, revisionID string) (*domain.Revision, error) {
 	var rev domain.Revision
 	var created string
-	err := r.db.QueryRowContext(ctx, `SELECT r.id, r.interpretation_id, r.version, r.schema_json, r.created_at FROM revisions r JOIN interpretations i ON i.id = r.interpretation_id WHERE r.id = ? AND i.id = ? AND i.project_id = ?`, revisionID, interpretationID, projectID).Scan(&rev.ID, &rev.InterpretationID, &rev.Version, &rev.SchemaJSON, &created)
+	err := r.db.QueryRowContext(ctx, `SELECT r.id, r.interpretation_id, r.version, r.schema_json, r.created_at, r.change_comment, r.parent_revision_id FROM revisions r JOIN interpretations i ON i.id = r.interpretation_id WHERE r.id = ? AND i.id = ? AND i.project_id = ?`, revisionID, interpretationID, projectID).Scan(&rev.ID, &rev.InterpretationID, &rev.Version, &rev.SchemaJSON, &created, &rev.ChangeComment, &rev.ParentRevisionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, domain.ErrNotFound
 	}

@@ -9,13 +9,15 @@ import (
 )
 
 type CreateInput struct {
-	Name     string         `json:"name"`
-	Settings map[string]any `json:"settings,omitempty"`
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Settings    map[string]any `json:"settings,omitempty"`
 }
 
 type Project struct {
 	ID              string    `json:"projectId"`
 	Name            string    `json:"name"`
+	Description     string    `json:"description"`
 	Status          string    `json:"status"`
 	SettingsVersion *string   `json:"settingsVersion"`
 	CreatedAt       time.Time `json:"createdAt"`
@@ -45,6 +47,9 @@ type Context struct {
 }
 
 type EvidenceInput struct {
+	SessionID     string `json:"sessionId,omitempty"`
+	Direction     string `json:"direction,omitempty"`
+	AlternativeID string `json:"alternativeId,omitempty"`
 	Kind          string `json:"kind"`
 	CaptureID     string `json:"captureId"`
 	CaptureSHA256 string `json:"captureSha256"`
@@ -57,17 +62,24 @@ type EvidenceInput struct {
 }
 
 type ObservationInput struct {
-	Kind     string          `json:"kind"`
-	Text     string          `json:"text"`
-	Status   string          `json:"status,omitempty"`
-	ActionID string          `json:"actionId,omitempty"`
-	Evidence []EvidenceInput `json:"evidence,omitempty"`
+	Kind           string          `json:"kind"`
+	Text           string          `json:"text"`
+	Status         string          `json:"status,omitempty"`
+	ActionID       string          `json:"actionId,omitempty"`
+	Evidence       []EvidenceInput `json:"evidence,omitempty"`
+	Basis          string          `json:"basis,omitempty"`
+	Links          []LinkReference `json:"sourceLinks,omitempty"`
+	IdempotencyKey string          `json:"-"`
 }
 
 type ObservationPatch struct {
-	Text                *string   `json:"text,omitempty"`
-	Status              *string   `json:"status,omitempty"`
-	SelectedEvidenceIDs *[]string `json:"selectedEvidenceIds,omitempty"`
+	Kind                *string          `json:"kind,omitempty"`
+	Text                *string          `json:"text,omitempty"`
+	Status              *string          `json:"status,omitempty"`
+	SelectedEvidenceIDs *[]string        `json:"selectedEvidenceIds,omitempty"`
+	Basis               *string          `json:"basis,omitempty"`
+	Links               *[]LinkReference `json:"sourceLinks,omitempty"`
+	IdempotencyKey      string           `json:"-"`
 }
 
 var ErrInvalid = errors.New("invalid project request")
@@ -97,7 +109,7 @@ func ValidIdempotencyKey(key string) bool {
 }
 func (in *CreateInput) Normalize(key string) error {
 	in.Name = strings.TrimSpace(in.Name)
-	if in.Name == "" || utf8.RuneCountInString(in.Name) > 200 || !ValidIdempotencyKey(key) {
+	if in.Name == "" || utf8.RuneCountInString(in.Name) > 200 || len(in.Description) > 8000 || !ValidIdempotencyKey(key) {
 		return ErrInvalid
 	}
 	if in.Settings == nil {
@@ -106,7 +118,7 @@ func (in *CreateInput) Normalize(key string) error {
 	return nil
 }
 func (in *ObservationInput) Normalize() error {
-	if !ValidObservationKind(in.Kind) || strings.TrimSpace(in.Text) == "" || len(in.Text) > 20000 || len(in.Evidence) > 100 {
+	if !ValidObservationKind(in.Kind) || strings.TrimSpace(in.Text) == "" || len(in.Text) > 20000 || len(in.Evidence) > 100 || len(in.Basis) > 8000 || len(in.Links) > 100 {
 		return ErrInvalid
 	}
 	if in.Status == "" {
@@ -124,13 +136,22 @@ func (e EvidenceInput) Validate() error {
 	return nil
 }
 func (in ObservationPatch) Validate() error {
-	if in.Text == nil && in.Status == nil && in.SelectedEvidenceIDs == nil {
+	if in.Text == nil && in.Status == nil && in.SelectedEvidenceIDs == nil && in.Basis == nil && in.Links == nil && in.Kind == nil {
+		return ErrInvalid
+	}
+	if in.Kind != nil && !ValidObservationKind(*in.Kind) {
 		return ErrInvalid
 	}
 	if in.Text != nil && (strings.TrimSpace(*in.Text) == "" || len(*in.Text) > 20000) {
 		return ErrInvalid
 	}
 	if in.Status != nil && !ValidObservationStatus(*in.Status) {
+		return ErrInvalid
+	}
+	if in.Basis != nil && len(*in.Basis) > 8000 {
+		return ErrInvalid
+	}
+	if in.Links != nil && len(*in.Links) > 100 {
 		return ErrInvalid
 	}
 	return nil

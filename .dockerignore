@@ -6,7 +6,10 @@ docs
 bin
 dist
 testdata/sample_protocol.tar.zst
-frontend
+frontend/node_modules
+frontend/dist
+frontend/playwright-report
+frontend/test-results
 .idea
 .vscode
 .DS_Store

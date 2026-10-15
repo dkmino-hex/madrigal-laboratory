@@ -1,7 +1,7 @@
 import { http, HttpResponse, delay } from 'msw';
 import { z } from 'zod';
 import { operations, type Operation } from '../shared/api/registry';
-import * as dto from '../shared/api/contracts/draft';
+import * as dto from '../shared/api/contracts/models';
 import {
   decimal,
   boundedIndex,
@@ -376,6 +376,12 @@ export async function dispatch(
   if (projectId) requireProject(state, projectId);
   let result: unknown;
   switch (operation) {
+    case 'discover':
+    case 'saveAutomaticObservation':
+      throw new MockError(
+        'DEMO_LIMITATION',
+        'Автоматическое исследование работает с реальными Capture и Workspace. Открой API-режим.',
+      );
     case 'projects':
       result = page(
         state.projects.filter((project) => project.name.toLowerCase().includes(query)),

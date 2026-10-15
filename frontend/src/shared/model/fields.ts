@@ -1,4 +1,4 @@
-import type { FieldResult } from '../api/contracts/draft';
+import type { FieldResult } from '../api/contracts/models';
 
 export type FieldPair = { left?: FieldResult; right?: FieldResult; relativeStart: string };
 

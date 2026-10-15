@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dkmino-hex/madrigal-laboratory/platform/identifier"
@@ -49,10 +50,10 @@ func (s Store) Actions(ctx context.Context, projectID string, q ActionQuery) (ma
 	if status != "READY" {
 		return nil, ErrProjectNotReady
 	}
-	query := `SELECT a.id,a.journal_import_id,a.source_action_id,a.source_line,a.capture_path,a.session_label,a.start_unix_ns,a.end_unix_ns,a.name,a.parameters_json,a.observed_result_json FROM actions a JOIN journal_imports ji ON ji.id=a.journal_import_id AND ji.status='READY' WHERE a.project_id=?1 AND a.id>?2`
+	query := `SELECT a.id,a.journal_import_id,a.source_action_id,a.source_line,a.capture_path,a.session_label,a.start_unix_ns,a.end_unix_ns,a.name,a.parameters_json,a.observed_result_json,a.type,ji.original_name,ji.timezone,ji.time_offset_ns FROM actions a JOIN journal_imports ji ON ji.id=a.journal_import_id AND ji.status='READY' WHERE a.project_id=?1 AND a.id>?2`
 	args := []any{projectID, q.Cursor}
 	if q.Name != "" {
-		query += " AND a.name=?" + strconv.Itoa(len(args)+1)
+		query += " AND coalesce(nullif(a.type,''),a.name)=?" + strconv.Itoa(len(args)+1)
 		args = append(args, q.Name)
 	}
 	if q.From != nil {
@@ -63,8 +64,11 @@ func (s Store) Actions(ctx context.Context, projectID string, q ActionQuery) (ma
 		query += " AND a.start_unix_ns<=?" + strconv.Itoa(len(args)+1)
 		args = append(args, *q.To)
 	}
-	query += " ORDER BY a.id LIMIT ?" + strconv.Itoa(len(args)+1)
-	args = append(args, q.Limit+1)
+	query += " ORDER BY a.id"
+	if q.Search == "" {
+		query += " LIMIT ?" + strconv.Itoa(len(args)+1)
+		args = append(args, q.Limit+1)
+	}
 	rows, err := s.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -72,17 +76,27 @@ func (s Store) Actions(ctx context.Context, projectID string, q ActionQuery) (ma
 	defer rows.Close()
 	items := make([]map[string]any, 0)
 	for rows.Next() {
-		var id, imp, sourceID, path, name, params, result string
+		var id, imp, sourceID, path, name, params, result, kind, filename, timezone string
 		var session sql.NullString
-		var line, start, end int64
-		if err := rows.Scan(&id, &imp, &sourceID, &line, &path, &session, &start, &end, &name, &params, &result); err != nil {
+		var line, start, end, offset int64
+		if err := rows.Scan(&id, &imp, &sourceID, &line, &path, &session, &start, &end, &name, &params, &result, &kind, &filename, &timezone, &offset); err != nil {
 			return nil, err
 		}
-		items = append(items, map[string]any{"actionId": id, "importId": imp, "sourceActionId": sourceID, "sourceLine": line, "capturePath": path, "session": session.String, "start": time.Unix(0, start).UTC().Format(time.RFC3339Nano), "end": time.Unix(0, end).UTC().Format(time.RFC3339Nano), "name": name, "parameters": json.RawMessage(params), "observedResult": json.RawMessage(result)})
+		if q.Search != "" && !strings.Contains(strings.ToLower(name+" "+kind+" "+params), strings.ToLower(q.Search)) {
+			continue
+		}
+		if kind == "" {
+			kind = name
+		}
+		items = append(items, map[string]any{"projectId": projectID, "type": kind, "sourceFile": filename, "timezone": timezone, "timeOffsetNs": strconv.FormatInt(offset, 10), "parametersJson": params, "actionId": id, "importId": imp, "sourceActionId": sourceID, "sourceLine": line, "capturePath": path, "session": session.String, "start": time.Unix(0, start).UTC().Format(time.RFC3339Nano), "end": time.Unix(0, end).UTC().Format(time.RFC3339Nano), "name": name, "parameters": json.RawMessage(params), "observedResult": json.RawMessage(result)})
+		if len(items) > q.Limit {
+			break
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	rows.Close()
 	cursor := ""
 	if len(items) > q.Limit {
 		items = items[:q.Limit]
@@ -101,6 +115,17 @@ func (s Store) RegisterJournal(ctx context.Context, projectID string, in Journal
 		return JournalImport{}, err
 	}
 	defer tx.Rollback()
+	scope := "projects:" + projectID + ":journal"
+	requestHash, err := mutationHash(map[string]any{"input": in, "sha256": hash})
+	if err != nil {
+		return JournalImport{}, err
+	}
+	var replayed JournalImport
+	if ok, err := replayMutation(ctx, tx, scope, in.IdempotencyKey, requestHash, &replayed); err != nil {
+		return JournalImport{}, err
+	} else if ok {
+		return replayed, tx.Commit()
+	}
 	id := identifier.New("journal")
 	job, err := s.Jobs().EnqueueTx(ctx, tx, projectID, JournalKind, &id, map[string]string{"importId": id})
 	if err != nil {
@@ -110,10 +135,11 @@ func (s Store) RegisterJournal(ctx context.Context, projectID string, in Journal
 	if err != nil {
 		return JournalImport{}, err
 	}
-	if err = tx.Commit(); err != nil {
+	result := JournalImport{ID: id, JobID: job.ID, Status: "IMPORTING", SHA256: hash, Diagnostics: json.RawMessage("[]")}
+	if err = rememberMutation(ctx, tx, scope, in.IdempotencyKey, requestHash, id, 202, result); err != nil {
 		return JournalImport{}, err
 	}
-	return JournalImport{ID: id, JobID: job.ID, Status: "IMPORTING", SHA256: hash, Diagnostics: json.RawMessage("[]")}, nil
+	return result, tx.Commit()
 
 }
 
@@ -130,7 +156,7 @@ func (s Store) WriteJournal(ctx context.Context, j jobs.Job, parse func(func(dom
 	}
 	defer tx.Rollback()
 	total, accepted, diagnostics, err := parse(func(row domain.JournalAction) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO actions(id,project_id,journal_import_id,source_action_id,source_line,capture_path,session_label,start_unix_ns,end_unix_ns,name,parameters_json,observed_result_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)`, identifier.New("act"), j.ProjectID, *j.ResourceID, row.SourceID, row.Line, row.Capture, row.Session, row.Start, row.End, row.Name, row.Parameters, row.Result)
+		_, err := tx.ExecContext(ctx, `INSERT INTO actions(id,project_id,journal_import_id,source_action_id,source_line,capture_path,session_label,start_unix_ns,end_unix_ns,name,parameters_json,observed_result_json,type) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)`, identifier.New("act"), j.ProjectID, *j.ResourceID, row.SourceID, row.Line, row.Capture, row.Session, row.Start, row.End, row.Name, row.Parameters, row.Result, row.Type)
 		return err
 	})
 	if err != nil {

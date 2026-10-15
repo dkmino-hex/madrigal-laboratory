@@ -10,8 +10,9 @@ import (
 
 // PreviewService applies a saved revision to an explicit Capture byte range.
 type PreviewService struct {
-	Repo    Repository
-	Capture Capture
+	Repo      Repository
+	Capture   Capture
+	Workspace Workspace
 }
 
 func (s *PreviewService) Run(ctx context.Context, projectID, revisionID, assemblyID, streamID string, offset, length uint64) (engine.Result, error) {
@@ -29,5 +30,9 @@ func (s *PreviewService) Run(ctx context.Context, projectID, revisionID, assembl
 	if err != nil {
 		return engine.Result{}, err
 	}
-	return engine.Parse(schema, blocks)
+	actions, _, err := actionSnapshot(ctx, projectID, schema, s.Workspace)
+	if err != nil {
+		return engine.Result{}, err
+	}
+	return engine.Parse(schema, blocks, actionMatcher(actions))
 }

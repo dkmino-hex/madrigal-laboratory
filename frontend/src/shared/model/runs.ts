@@ -1,4 +1,4 @@
-import type { Run, Summary } from '../api/contracts/draft';
+import type { Run, Summary } from '../api/contracts/models';
 export function summaryConclusion(summary: Summary, status: Run['status']) {
   if (status !== 'COMPLETED' || !summary.complete) return 'Частичный или незавершённый результат';
   if (summary.messages === '0') return 'Нет сообщений: проверка протокола не подтверждена';

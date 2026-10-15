@@ -7,7 +7,7 @@ import { config } from '../app/config';
 import { api } from '../shared/api/client';
 import { queryKey } from '../shared/api/query';
 import { MoreChoices, usePagedChoices } from '../shared/api/paged-choices';
-import type { Location } from '../shared/api/contracts/draft';
+import type { Location } from '../shared/api/contracts/models';
 import { decimal, decimalSchema, formatInteger, formatTimestamp } from '../shared/model/precision';
 import { readLocation, safeReturnPath, sameContext } from '../shared/model/navigation';
 import { readPreference, savePreference } from '../shared/lib/storage';
@@ -114,8 +114,12 @@ export default function Traffic() {
     queryFn: ({ signal }) => api.settings(projectId, assembly!.settingsVersion, { signal }),
     enabled: !!assembly,
   });
-  const selectedStart = params.get('start') ?? '1000';
-  const selectedLength = params.get('length') ?? '4';
+  const selectedStart = params.get('start') ?? (config.mode === 'api' ? '0' : '1000');
+  const selectedLength =
+    params.get('length') ??
+    (config.mode === 'api' && assembly
+      ? String(BigInt(assembly.length) < 4n ? BigInt(assembly.length) : 4n)
+      : '4');
   let selection: Location | null = direct;
   if (
     !direct &&
@@ -218,6 +222,42 @@ export default function Traffic() {
     setPendingAssembly(undefined);
   }
   const returnPath = safeReturnPath(params.get('returnTo'), projectId);
+  const [hintsEnabled, setHintsEnabled] = useState(false);
+  const hints = useQuery({
+    queryKey: queryKey(projectId, 'discover', { captureId, assemblyId, direction }),
+    queryFn: ({ signal }) =>
+      api.discover({ projectId, captures: [{ captureId, assemblyId }], direction }, { signal }),
+    enabled: config.mode === 'api' && hintsEnabled && !!assemblyId,
+  });
+  const annotations: { start: string; length: string; label: string }[] = [];
+  if (hintsEnabled && hints.data)
+    for (const candidate of hints.data.candidates
+      .filter((item) => item.kind === 'parameter' || item.kind === 'variable')
+      .slice(0, 12))
+      for (const row of hints.data.rows) {
+        if (annotations.length >= 64) break;
+        if (
+          row.groupId !== candidate.groupId ||
+          row.location.streamId !== selection?.streamId ||
+          candidate.offset + candidate.length > Number(row.location.length)
+        )
+          continue;
+        const start = String(BigInt(row.location.start) + BigInt(candidate.offset)),
+          length = String(candidate.length);
+        if (!annotations.some((item) => item.start === start && item.length === length))
+          annotations.push({
+            start,
+            length,
+            label:
+              'Кандидат: ' +
+              (candidate.parameter || 'изменяющийся участок') +
+              ' · ' +
+              candidate.matches +
+              '/' +
+              candidate.total,
+          });
+        if (annotations.length >= 64) break;
+      }
   return (
     <>
       <PageHeading
@@ -226,12 +266,44 @@ export default function Traffic() {
         actions={
           returnPath && (
             <Link className="button secondary" to={returnPath}>
-              Вернуться к результату
+              {new URL(returnPath, window.location.origin).pathname.endsWith('/actions')
+                ? 'Вернуться к журналу'
+                : 'Вернуться к результату'}
             </Link>
           )
         }
       />
       {linkError && <ErrorState error={linkError} />}
+      {config.mode === 'api' && assemblyId && (
+        <div className="research-hints">
+          <Button disabled={hints.isFetching} onClick={() => setHintsEnabled((value) => !value)}>
+            {hints.isFetching
+              ? 'Поиск кандидатов…'
+              : hintsEnabled
+                ? 'Скрыть подсветку кандидатов'
+                : 'Подсветить кандидаты в поля'}
+          </Button>
+          {hintsEnabled && (
+            <>
+              <span className="muted">
+                Подсветка — предложение для наблюдения, а не установленное назначение поля.
+              </span>
+              {annotations.slice(0, 5).map((item) => (
+                <Button
+                  key={item.start + ':' + item.length}
+                  onClick={() => updateSelection(item.start, item.length)}
+                >
+                  @{item.start} · {item.label}
+                </Button>
+              ))}
+              {hints.data && !annotations.length && (
+                <span>Для этого потока кандидатов в выборке нет.</span>
+              )}
+              {hints.error && <ErrorState error={hints.error} />}
+            </>
+          )}
+        </div>
+      )}
       {import.meta.env.DEV &&
         config.mode === 'mock' &&
         ['capture-baseline', 'capture-additional', 'capture-defects', 'capture-precision'].includes(
@@ -486,7 +558,7 @@ export default function Traffic() {
                     .filter((item) => item.direction === direction)
                     .map((item) => (
                       <option
-                        key={item.assemblyId}
+                        key={item.assemblyId + ':' + item.streamId}
                         value={item.assemblyId}
                         disabled={item.status !== 'READY'}
                       >
@@ -602,6 +674,7 @@ export default function Traffic() {
                   (bytes.data.segments.length ? (
                     <HexViewer
                       window={bytes.data}
+                      annotations={annotations}
                       selection={selection}
                       onSelect={(start, length, windowStart) =>
                         updateSelection(start, length, windowStart ?? false)

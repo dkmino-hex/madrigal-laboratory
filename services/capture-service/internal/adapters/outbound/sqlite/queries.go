@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dkmino-hex/madrigal-laboratory/platform/identifier"
@@ -35,7 +36,12 @@ func (store Store) ListCaptures(ctx context.Context, projectID, cursorToken stri
 		items = items[:limit]
 		cursor = items[len(items)-1]["captureId"].(string)
 	}
-	return map[string]any{"items": items, "nextCursor": cursor}, nil
+	rows.Close()
+	var total int64
+	if err = store.DB.QueryRowContext(ctx, "SELECT count(*) FROM captures WHERE project_id=?", projectID).Scan(&total); err != nil {
+		return nil, err
+	}
+	return map[string]any{"items": items, "nextCursor": cursor, "total": strconv.FormatInt(total, 10)}, nil
 }
 
 func (store Store) Packet(ctx context.Context, projectID, captureID string, n int64) (map[string]any, error) {
@@ -215,20 +221,20 @@ func (store Store) SourceSpans(ctx context.Context, projectID string, assemblyID
 }
 
 func (store Store) SourceSpansUnchecked(ctx context.Context, assemblyID, streamID string, offset, length int64) ([]map[string]any, error) {
-	rows, err := store.DB.QueryContext(ctx, `SELECT ss.packet_no,ss.frame_offset,ss.stream_offset,ss.byte_length,ss.alternative_id FROM source_spans ss JOIN stream_intervals i ON i.id=ss.interval_id WHERE i.assembly_id=?1 AND i.stream_id=?2 AND ss.stream_offset+ss.byte_length>?3 AND ss.stream_offset<?4 ORDER BY ss.stream_offset,ss.packet_no,ss.frame_offset`, assemblyID, streamID, offset, offset+length)
+	rows, err := store.DB.QueryContext(ctx, `SELECT ss.packet_no,ss.frame_offset,ss.stream_offset,ss.byte_length,ss.alternative_id,p.timestamp_seconds,p.timestamp_nanoseconds FROM source_spans ss JOIN stream_intervals i ON i.id=ss.interval_id JOIN packets p ON p.capture_id=ss.capture_id AND p.packet_no=ss.packet_no WHERE i.assembly_id=?1 AND i.stream_id=?2 AND ss.stream_offset+ss.byte_length>?3 AND ss.stream_offset<?4 ORDER BY ss.stream_offset,ss.packet_no,ss.frame_offset`, assemblyID, streamID, offset, offset+length)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	items := make([]map[string]any, 0)
 	for rows.Next() {
-		var packet, frame, start, n int64
+		var packet, frame, start, n, seconds, nanos int64
 		var alternative sql.NullString
-		if err := rows.Scan(&packet, &frame, &start, &n, &alternative); err != nil {
+		if err := rows.Scan(&packet, &frame, &start, &n, &alternative, &seconds, &nanos); err != nil {
 			return nil, err
 		}
 		lo, hi := max(start, offset), min(start+n, offset+length)
-		items = append(items, map[string]any{"packetNo": packet, "frameStart": frame + lo - start, "frameEnd": frame + hi - start, "streamStart": lo, "streamEnd": hi, "alternativeId": alternative.String})
+		items = append(items, map[string]any{"packetNo": packet, "frameStart": frame + lo - start, "frameEnd": frame + hi - start, "streamStart": lo, "streamEnd": hi, "alternativeId": alternative.String, "timestamp": time.Unix(seconds, nanos).UTC().Format(time.RFC3339Nano)})
 	}
 	return items, rows.Err()
 }
@@ -236,13 +242,16 @@ func (store Store) SourceSpansUnchecked(ctx context.Context, assemblyID, streamI
 func (store Store) Sessions(ctx context.Context, projectID string, q map[string]string, limit int) (map[string]any, error) {
 	args := []any{projectID, q["cursor"]}
 	query := `SELECT s.id,s.assembly_id,s.capture_id,s.generation,s.endpoint_a_ip,s.endpoint_a_port,s.endpoint_b_ip,s.endpoint_b_port,s.first_packet_no,s.last_packet_no,s.diagnostics_json FROM sessions s JOIN assemblies a ON a.id=s.assembly_id WHERE a.project_id=?1 AND a.status='READY' AND s.id>?2`
-	filters := []struct{ key, column string }{{"captureId", "s.capture_id"}, {"assemblyId", "s.assembly_id"}, {"ip", ""}, {"port", ""}, {"from", ""}, {"to", ""}}
+	filters := []struct{ key, column string }{{"captureId", "s.capture_id"}, {"assemblyId", "s.assembly_id"}, {"streamId", ""}, {"ip", ""}, {"port", ""}, {"from", ""}, {"to", ""}}
 	for _, f := range filters {
 		v := q[f.key]
 		if v == "" {
 			continue
 		}
 		switch f.key {
+		case "streamId":
+			query += " AND EXISTS(SELECT 1 FROM streams st WHERE st.session_id=s.id AND st.assembly_id=s.assembly_id AND st.id=?" + strconv.Itoa(len(args)+1) + ")"
+			args = append(args, v)
 		case "ip":
 			query += " AND (s.endpoint_a_ip=?" + strconv.Itoa(len(args)+1) + " OR s.endpoint_b_ip=?" + strconv.Itoa(len(args)+1) + ")"
 			args = append(args, v)
@@ -269,8 +278,14 @@ func (store Store) Sessions(ctx context.Context, projectID string, q map[string]
 			args = append(args, v)
 		}
 	}
-	query += " ORDER BY s.id LIMIT ?" + strconv.Itoa(len(args)+1)
-	args = append(args, limit+1)
+	if q["defects"] == "true" {
+		query += " AND (coalesce(json_array_length(s.diagnostics_json),0)>0 OR EXISTS(SELECT 1 FROM streams st WHERE st.session_id=s.id AND coalesce(json_array_length(st.diagnostics_json),0)>0))"
+	}
+	query += " ORDER BY s.id"
+	if q["q"] == "" {
+		query += " LIMIT ?" + strconv.Itoa(len(args)+1)
+		args = append(args, limit+1)
+	}
 	rows, err := store.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -283,7 +298,13 @@ func (store Store) Sessions(ctx context.Context, projectID string, q map[string]
 		if err := rows.Scan(&id, &aid, &cid, &gen, &aip, &aport, &bip, &bport, &first, &last, &diagnostics); err != nil {
 			return nil, err
 		}
+		if q["q"] != "" && !strings.Contains(strings.ToLower(aip+" "+bip+" "+strconv.FormatInt(aport, 10)+" "+strconv.FormatInt(bport, 10)+" "+id), strings.ToLower(q["q"])) {
+			continue
+		}
 		items = append(items, map[string]any{"sessionId": id, "assemblyId": aid, "captureId": cid, "generation": gen, "endpointA": map[string]any{"ip": aip, "port": aport}, "endpointB": map[string]any{"ip": bip, "port": bport}, "firstPacketNo": first, "lastPacketNo": last, "diagnostics": json.RawMessage(diagnostics)})
+		if len(items) > limit {
+			break
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -382,7 +403,7 @@ func (store Store) ValidateEvidence(ctx context.Context, projectID string, entri
 		}
 		if e.AssemblyID != "" {
 			var found int
-			err = store.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM assemblies a JOIN streams s ON s.assembly_id=a.id JOIN stream_intervals i ON i.assembly_id=a.id AND i.stream_id=s.id JOIN source_spans ss ON ss.interval_id=i.id WHERE a.project_id=?1 AND a.status='READY' AND a.id=?2 AND s.id=?3 AND ss.capture_id=?4 AND ss.packet_no=?5 AND ss.frame_offset<=?6 AND ss.frame_offset+ss.byte_length>=?7 AND ss.stream_offset<=?8 AND ss.stream_offset+ss.byte_length>=?9`, projectID, e.AssemblyID, e.StreamID, captureID, e.PacketNo, e.FrameOffset, e.FrameOffset+e.ByteLength, *e.StreamOffset, *e.StreamOffset+e.ByteLength).Scan(&found)
+			err = store.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM assemblies a JOIN streams s ON s.assembly_id=a.id JOIN stream_intervals i ON i.assembly_id=a.id AND i.stream_id=s.id JOIN source_spans ss ON ss.interval_id=i.id WHERE a.project_id=?1 AND a.status='READY' AND a.id=?2 AND s.id=?3 AND ss.capture_id=?4 AND ss.packet_no=?5 AND ss.frame_offset<=?6 AND ss.frame_offset+ss.byte_length>=?7 AND ss.stream_offset<=?8 AND ss.stream_offset+ss.byte_length>=?9 AND ss.frame_offset+(?8-ss.stream_offset)=?6 AND (?10='' OR s.session_id=?10) AND (?11='' OR s.direction=?11) AND (?12='' OR ss.alternative_id=?12)`, projectID, e.AssemblyID, e.StreamID, captureID, e.PacketNo, e.FrameOffset, e.FrameOffset+e.ByteLength, *e.StreamOffset, *e.StreamOffset+e.ByteLength, e.SessionID, e.Direction, e.AlternativeID).Scan(&found)
 			if err != nil {
 				return err
 			}

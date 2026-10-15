@@ -5,7 +5,7 @@ try {
   const url = new URL(gateway);
   if (!['http:', 'https:'].includes(url.protocol) || url.pathname.includes('/internal/'))
     throw new Error('Нужен публичный HTTP Gateway');
-  await readFile(process.env.MADRIGAL_OPENAPI_FILE || 'contracts/gateway.openapi.json', 'utf8');
+  await readFile(process.env.MADRIGAL_OPENAPI_FILE || '../contracts/gateway.openapi.json', 'utf8');
   const mapping = JSON.parse(
     await readFile('src/shared/api/contracts/gateway-mapping.json', 'utf8'),
   );

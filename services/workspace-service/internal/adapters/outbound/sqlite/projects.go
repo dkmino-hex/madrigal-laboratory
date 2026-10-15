@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/dkmino-hex/madrigal-laboratory/platform/database"
@@ -32,14 +33,14 @@ type cursor struct {
 	ID   string `json:"id"`
 }
 
-const columns = "id,name,status,current_settings_version,created_at,updated_at"
+const columns = "id,name,description,status,current_settings_version,created_at,updated_at"
 
 type scanner interface{ Scan(...any) error }
 
 func scan(row scanner) (Project, error) {
 	var p Project
 	var created, updated database.Timestamp
-	err := row.Scan(&p.ID, &p.Name, &p.Status, &p.SettingsVersion, &created, &updated)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.Status, &p.SettingsVersion, &created, &updated)
 	p.CreatedAt, p.UpdatedAt, p.CreatedKey = created.Time, updated.Time, created.Text
 	return p, err
 }
@@ -79,7 +80,7 @@ func (s Store) Create(ctx context.Context, input CreateInput, key string) (Proje
 		return Project{}, false, err
 	}
 	id, settingsID := identifier.New("prj"), identifier.New("set")
-	p, err := scan(tx.QueryRowContext(ctx, "INSERT INTO projects(id,name,current_settings_version) VALUES(?1,?2,?3) RETURNING "+columns, id, input.Name, settingsID))
+	p, err := scan(tx.QueryRowContext(ctx, "INSERT INTO projects(id,name,description,current_settings_version) VALUES(?1,?2,?3,?4) RETURNING "+columns, id, input.Name, input.Description, settingsID))
 	if err != nil {
 		return Project{}, false, err
 	}
@@ -104,14 +105,22 @@ func (s Store) Get(ctx context.Context, id string) (Project, error) {
 	return scan(s.DB.QueryRowContext(ctx, "SELECT "+columns+" FROM projects WHERE id=?1", id))
 }
 
-func (s Store) List(ctx context.Context, token string, limit int) (Page, error) {
+func (s Store) List(ctx context.Context, token string, limit int, search ...string) (Page, error) {
 	if limit < 1 || limit > 100 {
 		return Page{}, ErrInvalid
+	}
+	queryText := ""
+	if len(search) > 0 {
+		queryText = strings.ToLower(search[0])
+	}
+	fetchLimit := limit + 1
+	if queryText != "" {
+		fetchLimit = -1
 	}
 	var rows *sql.Rows
 	var err error
 	if token == "" {
-		rows, err = s.DB.QueryContext(ctx, "SELECT "+columns+" FROM projects ORDER BY created_at,id LIMIT ?1", limit+1)
+		rows, err = s.DB.QueryContext(ctx, "SELECT "+columns+" FROM projects ORDER BY created_at,id LIMIT ?1", fetchLimit)
 	} else {
 		var c cursor
 		data, decodeErr := base64.RawURLEncoding.DecodeString(token)
@@ -121,7 +130,7 @@ func (s Store) List(ctx context.Context, token string, limit int) (Page, error) 
 		if _, err := time.Parse(time.RFC3339Nano, c.Time); err != nil {
 			return Page{}, ErrInvalid
 		}
-		rows, err = s.DB.QueryContext(ctx, "SELECT "+columns+" FROM projects WHERE (created_at,id)>(?1,?2) ORDER BY created_at,id LIMIT ?3", c.Time, c.ID, limit+1)
+		rows, err = s.DB.QueryContext(ctx, "SELECT "+columns+" FROM projects WHERE (created_at,id)>(?1,?2) ORDER BY created_at,id LIMIT ?3", c.Time, c.ID, fetchLimit)
 	}
 	if err != nil {
 		return Page{}, err
@@ -133,7 +142,13 @@ func (s Store) List(ctx context.Context, token string, limit int) (Page, error) 
 		if err != nil {
 			return Page{}, err
 		}
+		if queryText != "" && !strings.Contains(strings.ToLower(p.Name+" "+p.Description), queryText) {
+			continue
+		}
 		page.Items = append(page.Items, p)
+		if len(page.Items) > limit {
+			break
+		}
 	}
 	if err = rows.Err(); err != nil {
 		return Page{}, err

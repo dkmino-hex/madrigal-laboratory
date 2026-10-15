@@ -10,6 +10,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,11 +29,13 @@ func TestWorkspaceHTTPRoutes(t *testing.T) {
 	defer db.Close()
 	handler := workspace.New(db)
 	store := projects.Store{Repository: storage.Store{DB: db}}
+	callNumber := 0
 	call := func(method, path, contentType string, body io.Reader, want int) map[string]any {
 		t.Helper()
 		request := httptest.NewRequest(method, path, body)
 		request.Header.Set("Content-Type", contentType)
-		request.Header.Set("Idempotency-Key", "http-route-check")
+		callNumber++
+		request.Header.Set("Idempotency-Key", "http-route-check-"+strconv.Itoa(callNumber))
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != want {

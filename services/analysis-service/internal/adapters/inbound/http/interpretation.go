@@ -23,7 +23,8 @@ type CreateInterpretationRequest struct {
 	Description string          `json:"description"`
 	Revision    json.RawMessage `json:"revision"`
 	// Legacy alias for clients using the earlier prototype.
-	Schema json.RawMessage `json:"schema,omitempty"`
+	Schema     json.RawMessage `json:"schema,omitempty"`
+	SchemaJSON string          `json:"schemaJson,omitempty"`
 }
 
 type interpretationResponse struct {
@@ -36,19 +37,25 @@ type interpretationResponse struct {
 }
 
 func interpretationDTO(i domain.Interpretation, currentRevisionID string) interpretationResponse {
-	return interpretationResponse{InterpretationID: i.ID, ProjectID: i.ProjectID, Name: i.Name, Description: i.Description, CurrentRevisionID: currentRevisionID, CreatedAt: i.CreatedAt.UTC().Format("2006-01-02T15:04:05Z")}
+	return interpretationResponse{InterpretationID: i.ID, ProjectID: i.ProjectID, Name: i.Name, Description: i.Description, CurrentRevisionID: currentRevisionID, CreatedAt: i.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
 }
 func (h *InterpretationHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateInterpretationRequest
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
-	if err := dec.Decode(&req); err != nil {
+	if err := readBody(w, r, &req); err != nil {
 		writeJSON(w, 400, map[string]string{"error": "invalid JSON body"})
 		return
 	}
 	if len(req.Revision) == 0 {
 		req.Revision = req.Schema
 	}
-	result, err := h.service.Create(r.Context(), service.CreateInterpretationInput{ProjectID: r.PathValue("projectId"), Name: req.Name, Description: req.Description, Schema: req.Revision})
+	if req.SchemaJSON != "" {
+		if len(req.Revision) != 0 {
+			writeJSON(w, 400, map[string]string{"error": "use revision or schemaJson"})
+			return
+		}
+		req.Revision = json.RawMessage(req.SchemaJSON)
+	}
+	result, err := h.service.Create(r.Context(), service.CreateInterpretationInput{ProjectID: r.PathValue("projectId"), Name: req.Name, Description: req.Description, Schema: req.Revision, IdempotencyKey: r.Header.Get("Idempotency-Key")})
 	if err != nil {
 		writeAPIError(w, err)
 		return
@@ -104,4 +111,18 @@ func (h *InterpretationHandler) List(w http.ResponseWriter, r *http.Request) {
 		page.NextCursor = strconv.Itoa(end)
 	}
 	writeJSON(w, 200, map[string]any{"items": items, "page": page})
+}
+
+func (h *InterpretationHandler) Get(w http.ResponseWriter, r *http.Request) {
+	item, err := h.service.Get(r.Context(), r.PathValue("projectId"), r.PathValue("interpretationId"))
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	current, err := h.service.CurrentRevisionID(r.Context(), item.ID)
+	if err != nil {
+		writeAPIError(w, err)
+		return
+	}
+	writeJSON(w, 200, interpretationDTO(*item, current))
 }

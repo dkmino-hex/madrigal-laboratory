@@ -5,14 +5,49 @@ import { useProject } from '../app/Shell';
 import { api } from '../shared/api/client';
 import { queryKey } from '../shared/api/query';
 import { MoreChoices, usePagedChoices } from '../shared/api/paged-choices';
-import type { Location } from '../shared/api/contracts/draft';
+import type { Location } from '../shared/api/contracts/models';
 import { boundedIndex, decimal } from '../shared/model/precision';
 import { byteHex, cellAt, compareCells } from '../shared/model/bytes';
 import { pairFields } from '../shared/model/fields';
 import { readLocation, sourceLink } from '../shared/model/navigation';
 import { Banner, Button, Field, PageHeading, QueryState, ErrorState } from '../shared/ui/common';
 import { RangePicker } from '../shared/ui/RangePicker';
+import { config } from '../app/config';
+import { ResearchCompare } from '../features/research/ResearchCompare';
 export default function Compare() {
+  const [params, setParams] = useSearchParams();
+  const mode =
+    params.get('mode') ??
+    (config.mode === 'api' && !params.has('left') && !params.has('right') ? 'research' : 'pair');
+  return (
+    <>
+      <div className="comparison-modes" role="group" aria-label="Режим сравнения">
+        <Button
+          aria-pressed={mode === 'research'}
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            next.set('mode', 'research');
+            setParams(next);
+          }}
+        >
+          Автоматическое сравнение
+        </Button>
+        <Button
+          aria-pressed={mode === 'pair'}
+          onClick={() => {
+            const next = new URLSearchParams(params);
+            next.set('mode', 'pair');
+            setParams(next);
+          }}
+        >
+          Два диапазона вручную
+        </Button>
+      </div>
+      {mode === 'research' ? <ResearchCompare /> : <PairCompare />}
+    </>
+  );
+}
+function PairCompare() {
   const projectId = useProject().projectId;
   const [params, setParams] = useSearchParams();
   const paramsRef = useRef(params);

@@ -5,7 +5,7 @@ import { createMemoryRouter, Outlet, RouterProvider } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Editor from './Editor';
 import { api } from '../shared/api/client';
-import type { Location, Revision } from '../shared/api/contracts/draft';
+import type { Location, Revision } from '../shared/api/contracts/models';
 import { initialState } from '../mocks/state';
 import { assembliesFor, sessionsFor } from '../mocks/fixtures/corpus';
 

@@ -1,5 +1,5 @@
 // Package engine interprets byte ranges without inventing bytes for gaps or conflicts.
-// The schema contract is documented in ANALYSIS_SCHEMA.md.
+// The schema contract is documented in docs/analysis-schema.md at the repository root.
 package engine
 
 import (
@@ -9,12 +9,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/dkmino-hex/madrigal-laboratory/services/analysis-service/internal/domain"
 )
+
+const Version = "analysis-0.3"
 
 type Span struct {
 	AssemblyID  string          `json:"assemblyId"`
@@ -24,6 +27,8 @@ type Span struct {
 	PacketRefs  []domain.Source `json:"packetRefs,omitempty"`
 }
 type Field struct {
+	Type       string `json:"type,omitempty"`
+	ValueText  string `json:"valueText,omitempty"`
 	Name       string `json:"name"`
 	Value      any    `json:"value,omitempty"`
 	SourceSpan Span   `json:"sourceSpan"`
@@ -53,11 +58,19 @@ type Result struct {
 	Errors         []Diagnostic  `json:"errors"`
 }
 type Definition struct {
-	Framing Framing    `json:"framing"`
-	Fields  []FieldDef `json:"fields"`
-	Checks  []CheckDef `json:"checks"`
-	Scope   string     `json:"scope,omitempty"`
+	Framing       Framing    `json:"framing"`
+	Fields        []FieldDef `json:"fields"`
+	Checks        []CheckDef `json:"checks"`
+	Scope         string     `json:"scope,omitempty"`
+	Direction     string     `json:"direction,omitempty"`
+	Match         []MatchDef `json:"match,omitempty"`
+	MessageLength uint64     `json:"messageLength,omitempty"`
 }
+type MatchDef struct {
+	Offset uint64 `json:"offset"`
+	Hex    string `json:"hex"`
+}
+type ActionMatcher func(domain.Block, Span, string) (string, string)
 type Framing struct {
 	Magic                string `json:"magic,omitempty"`
 	HeaderLength         uint64 `json:"headerLength,omitempty"`
@@ -67,20 +80,23 @@ type Framing struct {
 	FixedLength          uint64 `json:"fixedLength,omitempty"`
 }
 type FieldDef struct {
-	Name       string  `json:"name"`
-	Type       string  `json:"type"`
-	Offset     *uint64 `json:"offset,omitempty"`
-	Length     uint64  `json:"length,omitempty"`
-	LengthFrom string  `json:"lengthFrom,omitempty"`
-	Endian     string  `json:"endian,omitempty"`
+	Name       string       `json:"name"`
+	Type       string       `json:"type"`
+	Offset     *uint64      `json:"offset,omitempty"`
+	Length     uint64       `json:"length,omitempty"`
+	LengthFrom string       `json:"lengthFrom,omitempty"`
+	Endian     string       `json:"endian,omitempty"`
+	Scale      *json.Number `json:"scale,omitempty"`
 }
 type CheckDef struct {
-	ID    string          `json:"id"`
-	Field string          `json:"field"`
-	Op    string          `json:"op"`
-	Value json.RawMessage `json:"value,omitempty"`
-	Min   *float64        `json:"min,omitempty"`
-	Max   *float64        `json:"max,omitempty"`
+	ID        string          `json:"id"`
+	Field     string          `json:"field"`
+	Op        string          `json:"op"`
+	Value     json.RawMessage `json:"value,omitempty"`
+	Min       *json.Number    `json:"min,omitempty"`
+	Max       *json.Number    `json:"max,omitempty"`
+	Parameter string          `json:"parameter,omitempty"`
+	Tolerance *json.Number    `json:"tolerance,omitempty"`
 }
 
 func Validate(schema string) (Definition, error) {
@@ -90,6 +106,18 @@ func Validate(schema string) (Definition, error) {
 	}
 	if d.Fields == nil {
 		return d, fmt.Errorf("fields: required array")
+	}
+	if d.Direction != "" && d.Direction != "A_TO_B" && d.Direction != "B_TO_A" {
+		return d, fmt.Errorf("direction: unsupported")
+	}
+	if d.MessageLength > 1<<20 {
+		return d, fmt.Errorf("messageLength: too large")
+	}
+	for _, match := range d.Match {
+		data, e := hex.DecodeString(match.Hex)
+		if e != nil || len(data) == 0 || len(data) > 64 || match.Offset > 1<<20 {
+			return d, fmt.Errorf("match: invalid byte condition")
+		}
 	}
 	if d.Framing.Magic != "" {
 		m, e := hex.DecodeString(strings.ReplaceAll(d.Framing.Magic, " ", ""))
@@ -116,43 +144,83 @@ func Validate(schema string) (Definition, error) {
 		if f.Name == "" || names[f.Name] {
 			return d, fmt.Errorf("fields[%d].name: empty or duplicate", i)
 		}
-		names[f.Name] = true
+		if f.Offset != nil && *f.Offset > 1<<20 {
+			return d, fmt.Errorf("fields[%d].offset: too large", i)
+		}
 		if f.Length > 1<<20 {
 			return d, fmt.Errorf("fields[%d].length: too large", i)
 		}
 		if f.LengthFrom != "" && !names[f.LengthFrom] {
 			return d, fmt.Errorf("fields[%d].lengthFrom: must refer to earlier field", i)
 		}
+		names[f.Name] = true
 		switch f.Type {
-		case "string", "ascii", "utf8", "hex", "bytes", "base64", "uint8", "u8", "uint16", "uint16be", "uint16le", "u16be", "u16le", "uint32", "uint32be", "uint32le", "u32be", "u32le", "uint64be", "uint64le", "float32be", "float32le":
+		case "string", "ascii", "utf8", "hex", "bytes", "base64", "uint8", "u8", "uint16", "uint16be", "uint16le", "u16be", "u16le", "uint32", "uint32be", "uint32le", "u32be", "u32le", "uint64be", "uint64le", "float32be", "float32le", "int8", "int16le", "int16be", "int32le", "int32be", "int64le", "int64be":
 		default:
 			return d, fmt.Errorf("fields[%d].type: unsupported %q", i, f.Type)
 		}
+		if f.Scale != nil {
+			scale, ok := numericRat(*f.Scale)
+			if !ok || scale.Sign() == 0 || typeSize(f.Type) == 0 {
+				return d, fmt.Errorf("fields[%d].scale: invalid numeric factor", i)
+			}
+		}
 	}
+	ruleIDs := map[string]bool{}
 	for i, c := range d.Checks {
+		if ruleIDs[c.ID] {
+			return d, fmt.Errorf("checks[%d]: duplicate id", i)
+		}
+		ruleIDs[c.ID] = true
+		for _, bound := range []*json.Number{c.Min, c.Max} {
+			if bound != nil {
+				if _, ok := new(big.Rat).SetString(string(*bound)); !ok {
+					return d, fmt.Errorf("checks[%d]: invalid bound", i)
+				}
+			}
+		}
+		if c.Op == "eq" || c.Op == "length" {
+			if !json.Valid(c.Value) {
+				return d, fmt.Errorf("checks[%d]: value required", i)
+			}
+		}
 		if c.ID == "" || !names[c.Field] {
 			return d, fmt.Errorf("checks[%d]: id and existing field required", i)
 		}
 		switch c.Op {
 		case "eq", "range", "length":
+		case "action":
+			if c.Parameter == "" || len(c.Parameter) > 256 {
+				return d, fmt.Errorf("checks[%d].parameter: required", i)
+			}
 		default:
 			return d, fmt.Errorf("checks[%d].op: unsupported", i)
+		}
+		if c.Tolerance != nil {
+			t, ok := numericRat(*c.Tolerance)
+			if !ok || t.Sign() < 0 {
+				return d, fmt.Errorf("checks[%d].tolerance: invalid", i)
+			}
 		}
 	}
 	return d, nil
 }
-func Parse(schema string, blocks []domain.Block) (Result, error) {
+func Parse(schema string, blocks []domain.Block, matchers ...ActionMatcher) (Result, error) {
 	d, e := Validate(schema)
 	if e != nil {
 		return Result{}, e
 	}
 	out := Result{Messages: []Message{}, Fields: []Field{}, Checks: []CheckResult{}, UnknownRegions: []Span{}, Errors: []Diagnostic{}}
+	var matcher ActionMatcher
+	if len(matchers) > 0 {
+		matcher = matchers[0]
+	}
 	for _, b := range blocks {
-		parseBlock(&out, d, b)
+		parseBlock(&out, d, b, matcher)
 	}
 	return out, nil
 }
-func parseBlock(out *Result, d Definition, b domain.Block) {
+func parseBlock(out *Result, d Definition, b domain.Block, matcher ActionMatcher) {
 	if b.Length > 1<<20 {
 		out.Errors = append(out.Errors, Diagnostic{Code: "LIMIT", Message: "block exceeds 1 MiB"})
 		return
@@ -249,6 +317,38 @@ func parseBlock(out *Result, d Definition, b domain.Block) {
 			break
 		}
 		msg := Message{SourceSpan: makeSpan(b, b.Offset+uint64(pos), b.Offset+uint64(pos+length)), Status: "PASS", Fields: []Field{}, Checks: []CheckResult{}}
+		applicable := true
+		undetermined := false
+		if d.MessageLength > 0 && uint64(length) != d.MessageLength {
+			applicable = false
+		}
+		if d.Direction != "" {
+			if b.Direction == "" {
+				undetermined = true
+			} else if b.Direction != d.Direction {
+				applicable = false
+			}
+		}
+		for _, condition := range d.Match {
+			expected, _ := hex.DecodeString(condition.Hex)
+			start := pos + int(condition.Offset)
+			if start+len(expected) > pos+length || !allValid(valid, ambiguous, start, start+len(expected)) {
+				undetermined = true
+				continue
+			}
+			if string(data[start:start+len(expected)]) != string(expected) {
+				applicable = false
+			}
+		}
+		if !applicable || undetermined {
+			msg.Status = "NOT_APPLICABLE"
+			if undetermined && applicable {
+				msg.Status = "INCONCLUSIVE"
+			}
+			out.Messages = append(out.Messages, msg)
+			pos += length
+			continue
+		}
 		cursor := pos
 		values := map[string]any{}
 		raws := map[string][]byte{}
@@ -287,13 +387,16 @@ func parseBlock(out *Result, d Definition, b domain.Block) {
 			}
 			raw := data[start : start+sz]
 			value, e := decodeValue(f.Type, raw, f.Endian)
+			if e == nil && f.Scale != nil {
+				value, e = scaleValue(value, *f.Scale)
+			}
 			if e != nil {
 				msg.Status = "INCONCLUSIVE"
 				out.Errors = append(out.Errors, Diagnostic{Code: "FIELD_DECODE", Message: e.Error(), SourceSpan: &span})
 			} else {
 				values[f.Name] = value
 				raws[f.Name] = raw
-				field := Field{Name: f.Name, Value: value, SourceSpan: span}
+				field := Field{Name: f.Name, Type: f.Type, Value: value, ValueText: fmt.Sprint(value), SourceSpan: span}
 				msg.Fields = append(msg.Fields, field)
 				out.Fields = append(out.Fields, field)
 			}
@@ -311,23 +414,61 @@ func parseBlock(out *Result, d Definition, b domain.Block) {
 				switch c.Op {
 				case "eq":
 					var expected any
-					_ = json.Unmarshal(c.Value, &expected)
-					switch actual := v.(type) {
-					case uint64:
-						if f, yes := expected.(float64); !yes || float64(actual) != f {
+					dec := json.NewDecoder(strings.NewReader(string(c.Value)))
+					dec.UseNumber()
+					_ = dec.Decode(&expected)
+					if actual, number := numericRat(v); number {
+						right, yes := numericRat(expected)
+						if !yes || actual.Cmp(right) != 0 {
 							check.Status = "FAIL"
 						}
-					default:
-						if actual != expected {
-							check.Status = "FAIL"
-						}
+					} else if v != expected {
+						check.Status = "FAIL"
 					}
 				case "range":
-					n, yes := v.(uint64)
+					n, yes := numericRat(v)
 					if !yes {
 						check.Status = "INCONCLUSIVE"
-					} else if c.Min != nil && float64(n) < *c.Min || c.Max != nil && float64(n) > *c.Max {
-						check.Status = "FAIL"
+					} else {
+						if c.Min != nil {
+							bound, ok := numericRat(*c.Min)
+							if !ok {
+								check.Status = "INCONCLUSIVE"
+							} else if n.Cmp(bound) < 0 {
+								check.Status = "FAIL"
+							}
+						}
+						if c.Max != nil {
+							bound, ok := numericRat(*c.Max)
+							if !ok {
+								check.Status = "INCONCLUSIVE"
+							} else if n.Cmp(bound) > 0 {
+								check.Status = "FAIL"
+							}
+						}
+					}
+				case "action":
+					check.Status = "INCONCLUSIVE"
+					check.Message = "Нет однозначного значения параметра в закреплённом журнале"
+					if matcher != nil {
+						expected, reason := matcher(b, span, c.Parameter)
+						if reason != "" {
+							check.Message = reason
+						}
+						actual, aok := numericRat(v)
+						right, rok := numericRat(json.Number(expected))
+						if aok && rok {
+							difference := new(big.Rat).Abs(new(big.Rat).Sub(actual, right))
+							tolerance := new(big.Rat)
+							if c.Tolerance != nil {
+								tolerance, _ = numericRat(*c.Tolerance)
+							}
+							check.Status = "PASS"
+							if difference.Cmp(tolerance) > 0 {
+								check.Status = "FAIL"
+							}
+							check.Message = fmt.Sprintf("Журнал: %s; прочитано: %v", expected, v)
+						}
 					}
 				case "length":
 					var expected uint64
@@ -338,7 +479,9 @@ func parseBlock(out *Result, d Definition, b domain.Block) {
 			}
 			if check.Status == "FAIL" {
 				msg.Status = "FAIL"
-				check.Message = "rule violated"
+				if check.Message == "" {
+					check.Message = "rule violated"
+				}
 			}
 			if check.Status == "INCONCLUSIVE" && msg.Status == "PASS" {
 				msg.Status = "INCONCLUSIVE"
@@ -346,7 +489,10 @@ func parseBlock(out *Result, d Definition, b domain.Block) {
 			msg.Checks = append(msg.Checks, check)
 			out.Checks = append(out.Checks, check)
 		}
-		if !allValid(valid, ambiguous, pos, pos+length) && msg.Status == "PASS" {
+		if len(msg.Checks) == 0 && msg.Status == "PASS" {
+			msg.Status = "NOT_APPLICABLE"
+		}
+		if !allValid(valid, ambiguous, pos, pos+length) && (msg.Status == "PASS" || msg.Status == "NOT_APPLICABLE") {
 			msg.Status = "INCONCLUSIVE"
 		}
 		out.Messages = append(out.Messages, msg)
@@ -371,18 +517,43 @@ func allValid(valid, bad []bool, start, end int) bool {
 }
 func typeSize(t string) int {
 	switch t {
-	case "uint8", "u8":
+	case "uint8", "u8", "int8":
 		return 1
-	case "uint16", "uint16be", "uint16le", "u16be", "u16le":
+	case "uint16", "uint16be", "uint16le", "u16be", "u16le", "int16be", "int16le":
 		return 2
-	case "uint32", "uint32be", "uint32le", "u32be", "u32le", "float32be", "float32le":
+	case "uint32", "uint32be", "uint32le", "u32be", "u32le", "float32be", "float32le", "int32be", "int32le":
 		return 4
-	case "uint64be", "uint64le":
+	case "uint64be", "uint64le", "int64be", "int64le":
 		return 8
 	}
 	return 0
 }
 func decodeValue(t string, b []byte, endian string) (any, error) {
+	if strings.HasPrefix(t, "int") {
+		size := typeSize(t)
+		if len(b) != size || size == 0 {
+			return nil, fmt.Errorf("invalid signed width")
+		}
+		var n uint64
+		var order binary.ByteOrder = binary.BigEndian
+		if strings.HasSuffix(t, "le") {
+			order = binary.LittleEndian
+		}
+		switch size {
+		case 1:
+			n = uint64(b[0])
+			return int64(int8(n)), nil
+		case 2:
+			n = uint64(order.Uint16(b))
+			return int64(int16(n)), nil
+		case 4:
+			n = uint64(order.Uint32(b))
+			return int64(int32(n)), nil
+		case 8:
+			n = order.Uint64(b)
+			return int64(n), nil
+		}
+	}
 	switch t {
 	case "string", "ascii", "utf8":
 		if !utf8.Valid(b) {
@@ -436,4 +607,12 @@ func makeSpan(b domain.Block, start, end uint64) Span {
 		}
 	}
 	return Span{AssemblyID: b.AssemblyID, StreamID: b.StreamID, StartOffset: strconv.FormatUint(start, 10), EndOffset: strconv.FormatUint(end, 10), PacketRefs: refs}
+}
+
+func compareNumber(actual uint64, expected json.Number) int {
+	right, ok := new(big.Rat).SetString(string(expected))
+	if !ok {
+		return 1
+	}
+	return new(big.Rat).SetInt(new(big.Int).SetUint64(actual)).Cmp(right)
 }

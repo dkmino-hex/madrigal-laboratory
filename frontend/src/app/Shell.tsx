@@ -15,10 +15,11 @@ import {
   Settings2,
   Sun,
   PanelLeftClose,
+  CircleHelp,
 } from 'lucide-react';
 import { api } from '../shared/api/client';
 import { queryKey } from '../shared/api/query';
-import type { Project } from '../shared/api/contracts/draft';
+import type { Project } from '../shared/api/contracts/models';
 import { Badge, Banner, Button, Modal, QueryState } from '../shared/ui/common';
 import { JobsCenter, JobCard, trackJob } from '../features/jobs/Jobs';
 import { config } from './config';
@@ -107,6 +108,7 @@ export function Shell() {
   );
 }
 const sections = [
+  { path: '/guide', label: 'Как работать', icon: CircleHelp },
   { path: '', label: 'Обзор проекта', icon: FlaskConical },
   { path: '/traffic', label: 'Обмен и байты', icon: Activity },
   { path: '/actions', label: 'Журнал действий', icon: ListTodo },
@@ -159,6 +161,26 @@ export function ProjectLayout() {
         </div>
       </aside>
       <main id="main" className="main-content">
+        {project?.status === 'READY' && (
+          <nav className="research-workflow" aria-label="Этапы исследования">
+            {[
+              { path: '', label: '1 · Данные' },
+              { path: '/traffic', label: '2 · Сессии и байты' },
+              { path: '/compare', label: '3 · Сравнение' },
+              { path: '/interpretations', label: '4 · Схема' },
+              { path: '/runs', label: '5 · Проверка' },
+              { path: '/artifacts', label: '6 · Отчёт' },
+            ].map((step) => (
+              <NavLink
+                key={step.path}
+                end={step.path === ''}
+                to={'/projects/' + encodeURIComponent(projectId) + step.path}
+              >
+                {step.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
         <QueryState
           pending={query.isPending}
           error={query.error}

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
+import { config } from '../../app/config';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { queryKey } from '../api/query';
 import { MoreChoices, usePagedChoices } from '../api/paged-choices';
-import type { Location } from '../api/contracts/draft';
+import type { Location } from '../api/contracts/models';
 import { decimal } from '../model/precision';
 import { rangeInput } from '../model/validation';
 import { Field, ErrorState, Pagination } from './common';
@@ -22,9 +23,11 @@ export function RangePicker({
 }) {
   const [captureChoice, setCapture] = useState(initial?.captureId ?? '');
   const [sessionChoice, setSession] = useState(initial?.sessionId ?? '');
-  const [assemblyChoice, setAssembly] = useState(initial?.assemblyId ?? '');
+  const [assemblyChoice, setAssembly] = useState(
+    (config.mode === 'api' ? initial?.streamId : initial?.assemblyId) ?? '',
+  );
   const [sessionCursor, setSessionCursor] = useState('0');
-  const [start, setStart] = useState(initial?.start ?? '1000');
+  const [start, setStart] = useState(initial?.start ?? (config.mode === 'api' ? '0' : '1000'));
   const [length, setLength] = useState(initial?.length ?? '4');
   const callback = useRef(onChange);
   useEffect(() => {
@@ -57,16 +60,19 @@ export function RangePicker({
     (cursor, signal) => api.assemblies({ projectId, captureId, sessionId, cursor }, { signal }),
     { captureId, sessionId },
     !!sessionId,
-    assemblyChoice,
+    initial && assemblyChoice === initial.streamId ? initial.assemblyId : assemblyChoice,
     (assembly) => assembly.status === 'READY',
   );
-  const assemblyId =
-    assemblyChoice ||
-    assemblies.data?.items.find((assembly) => assembly.status === 'READY')?.assemblyId ||
-    '';
-  const assembly = assemblies.data?.items.find(
-    (assembly) => assembly.assemblyId === assemblyId && assembly.status === 'READY',
+  const choice = (item: { assemblyId: string; streamId: string }) =>
+    config.mode === 'api' ? item.streamId : item.assemblyId;
+  const firstReady = assemblies.data?.items.find(
+    (item) => item.status === 'READY' && (config.mode !== 'api' || BigInt(item.length) > 0n),
   );
+  const selectedChoice = assemblyChoice || (firstReady ? choice(firstReady) : '');
+  const assembly = assemblies.data?.items.find(
+    (item) => choice(item) === selectedChoice && item.status === 'READY',
+  );
+  const assemblyId = assembly?.assemblyId ?? '';
   const range = rangeInput(start, length, assembly?.length);
   if (
     range.length !== undefined &&
@@ -99,7 +105,7 @@ export function RangePicker({
     <fieldset className="range-picker">
       <legend>{label}</legend>
       <div className="range-picker-controls">
-        <Field label={label + ': запись'}>
+        <Field label={label + ': запись'} hint="Файл PCAP / PCAPNG с обменом устройств.">
           {(id) => (
             <select
               id={id}
@@ -131,7 +137,7 @@ export function RangePicker({
             </select>
           )}
         </Field>
-        <Field label={label + ': сессия'}>
+        <Field label={label + ': сессия'} hint="Одно соединение между двумя адресами устройств.">
           {(id) => (
             <select
               id={id}
@@ -146,7 +152,7 @@ export function RangePicker({
               )}
               {sessions.data?.items.map((item) => (
                 <option key={item.sessionId} value={item.sessionId}>
-                  {item.sessionId} · поколение {item.generation}
+                  {item.sideA} ↔ {item.sideB} · соединение {item.generation}
                 </option>
               ))}
             </select>
@@ -154,26 +160,26 @@ export function RangePicker({
         </Field>
         <Field
           label={label + ': сборка и направление'}
-          hint="Сборки в процессе подготовки и с ошибкой недоступны для исследования."
+          hint="A→B и B→A — стороны соединения. Сборка — сохранённая версия восстановленных байтов."
         >
           {(id) => (
             <select
               id={id}
-              value={assemblyId}
+              value={selectedChoice}
               onChange={(event) => setAssembly(event.target.value)}
             >
-              {assemblyId &&
-                !assemblies.data?.items.some((item) => item.assemblyId === assemblyId) && (
-                  <option value={assemblyId}>{assemblyId} · выбранная сборка</option>
+              {selectedChoice &&
+                !assemblies.data?.items.some((item) => choice(item) === selectedChoice) && (
+                  <option value={selectedChoice}>{selectedChoice} · выбранная сборка</option>
                 )}
               {assemblies.data?.items.map((item) => (
                 <option
-                  key={item.assemblyId}
-                  value={item.assemblyId}
+                  key={item.assemblyId + ':' + item.streamId}
+                  value={choice(item)}
                   disabled={item.status !== 'READY'}
                 >
-                  {item.assemblyId} · {item.direction === 'A_TO_B' ? 'A→B' : 'B→A'} ·{' '}
-                  {item.settingsVersion} ·{' '}
+                  {item.direction === 'A_TO_B' ? 'A→B' : 'B→A'} · {item.length} байт · версия{' '}
+                  {item.assemblyId.slice(-8)} ·{' '}
                   {item.status === 'READY'
                     ? 'Готова'
                     : item.status === 'BUILDING'
@@ -187,7 +193,7 @@ export function RangePicker({
         <div className="form-grid">
           <Field
             label={label + ': начало'}
-            hint="Смещение в байтах, начиная с 0."
+            hint="Позиция первого выбранного байта в потоке. 0 означает самое начало."
             error={range.startError}
           >
             {(id) => (
@@ -201,7 +207,7 @@ export function RangePicker({
           </Field>
           <Field
             label={label + ': длина'}
-            hint="Число байтов в диапазоне, больше 0."
+            hint="Сколько байтов выбрать. Например, начало 4 и длина 2 выбирают байты с позициями 4 и 5."
             error={range.lengthError}
           >
             {(id) => (
@@ -215,6 +221,43 @@ export function RangePicker({
           </Field>
         </div>
       </div>
+      {assembly && (
+        <details className="technical-details">
+          <summary>Технические идентификаторы выбранного участка</summary>
+          <dl className="guide-terms">
+            <div>
+              <dt>Запись</dt>
+              <dd>
+                <code>{captureId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Сессия</dt>
+              <dd>
+                <code>{sessionId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Сборка</dt>
+              <dd>
+                <code>{assembly.assemblyId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Поток</dt>
+              <dd>
+                <code>{assembly.streamId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Настройки</dt>
+              <dd>
+                <code>{assembly.settingsVersion}</code>
+              </dd>
+            </div>
+          </dl>
+        </details>
+      )}
       <MoreChoices label="записи" query={captures} />
       <MoreChoices label="версии сборки" query={assemblies} />
       {captureId &&
@@ -237,7 +280,7 @@ export function RangePicker({
             onChange={(cursor) => {
               setSessionCursor(cursor);
               setSession(sessionId);
-              setAssembly(assemblyId);
+              setAssembly(selectedChoice);
             }}
             total={sessions.data.total}
           />

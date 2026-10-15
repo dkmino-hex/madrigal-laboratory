@@ -67,6 +67,28 @@ export default function Overview() {
         </>
       ) : (
         <>
+          <section className="panel guide-intro">
+            <h2>С чего начать</h2>
+            <p>
+              {project.captures
+                ? 'Запись загружена. Открой обмен, выбери соединение по адресам устройств и посмотри переданные байты.'
+                : 'Добавь PCAP / PCAPNG — файл с записью обмена между устройствами. После обработки здесь появится кнопка «Исследовать».'}
+            </p>
+            <div className="toolbar">
+              {project.captures > 0 && (
+                <Link className="button primary" to={'/projects/' + project.projectId + '/traffic'}>
+                  Посмотреть обмен
+                </Link>
+              )}
+              <Link className="button secondary" to={'/projects/' + project.projectId + '/guide'}>
+                Как работать: пример по шагам
+              </Link>
+            </div>
+            <p className="muted">
+              Поле сообщения — это участок байтов, которому ты задаёшь имя и способ чтения. Начать
+              просмотр можно без схемы и журнала действий.
+            </p>
+          </section>
           <section className="panel">
             <div className="panel-heading">
               <h2>Исходные записи</h2>

@@ -61,11 +61,13 @@ func (s Store) CreateSnapshot(ctx context.Context, projectID string) (Snapshot, 
 		return Snapshot{}, ErrProjectNotReady
 	}
 	queries := []struct{ key, sql string }{
-		{"project", "SELECT id,name,status,current_settings_version,created_at,updated_at FROM projects WHERE id=?1"},
+		{"project", "SELECT id,name,description,status,current_settings_version,created_at,updated_at FROM projects WHERE id=?1"},
 		{"settings", "SELECT id,version,settings_json,created_at FROM project_settings WHERE project_id=?1 ORDER BY version"},
 		{"journalImports", "SELECT id,original_name,sha256,timezone,time_offset_ns,status,total_rows,accepted_rows,diagnostics_json,created_at FROM journal_imports WHERE project_id=?1 ORDER BY id"},
-		{"actions", "SELECT id,journal_import_id,source_action_id,source_line,capture_path,capture_id,session_label,start_unix_ns,end_unix_ns,name,parameters_json,observed_result_json,created_at FROM actions WHERE project_id=?1 ORDER BY id"},
-		{"observations", "SELECT id,kind,text,status,action_id,created_at,updated_at FROM observations WHERE project_id=?1 ORDER BY id"},
+		{"actions", "SELECT id,journal_import_id,source_action_id,source_line,capture_path,capture_id,session_label,start_unix_ns,end_unix_ns,name,type,parameters_json,observed_result_json,created_at FROM actions WHERE project_id=?1 ORDER BY id"},
+		{"observations", "SELECT id,kind,text,status,action_id,basis,generation_json,created_at,updated_at FROM observations WHERE project_id=?1 ORDER BY id"},
+		{"sourceLinks", "SELECT id,action_id,data_json,created_at FROM source_links WHERE project_id=?1 ORDER BY id"},
+		{"observationLinks", "SELECT observation_id,link_id,kind FROM observation_source_links WHERE project_id=?1 ORDER BY observation_id,link_id"},
 		{"evidence", "SELECT id,observation_id,kind,capture_sha256,packet_no,frame_offset,byte_length,assembly_id,stream_id,stream_offset,selected,created_at FROM evidence WHERE project_id=?1 ORDER BY id"},
 	}
 	metadata := make(map[string]any, len(queries))

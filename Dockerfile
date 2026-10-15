@@ -1,3 +1,10 @@
+FROM node:24-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum go.work ./
@@ -15,6 +22,9 @@ RUN apk add --no-cache tzdata \
     && addgroup -S madrigal && adduser -S madrigal -G madrigal \
     && mkdir -p /data/capture /data/workspace /data/analysis && chown -R madrigal:madrigal /data
 COPY --from=build /out/ /usr/local/bin/
+COPY --from=frontend /frontend/dist/ /app/frontend/
+COPY contracts/gateway.openapi.json /app/frontend/openapi.json
+ENV FRONTEND_DIR=/app/frontend
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 USER madrigal
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

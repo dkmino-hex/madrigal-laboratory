@@ -5,7 +5,7 @@ import { useProject } from '../app/Shell';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
 import { MoreChoices, usePagedChoices } from '../shared/api/paged-choices';
-import type { Evidence, Hypothesis } from '../shared/api/contracts/draft';
+import type { Evidence, Hypothesis } from '../shared/api/contracts/models';
 import { sourceLink } from '../shared/model/navigation';
 import { UnsavedGuard } from '../shared/lib/use-unsaved';
 import { textError, choiceError } from '../shared/model/validation';
@@ -37,7 +37,11 @@ export default function Hypotheses() {
   const type = params.get('type') ?? '';
   const cursor = params.get('cursor') ?? '0';
   const typeProblem = choiceError(type, ['', 'hypothesis', 'observation'], 'тип записи');
-  const statusProblem = choiceError(status, ['', 'open', 'supported', 'refuted'], 'статус');
+  const statusProblem = choiceError(
+    status,
+    ['', 'open', 'supported', 'refuted', 'inconclusive'],
+    'статус',
+  );
   const filterProblem = typeProblem ?? statusProblem;
   const query = useQuery({
     queryKey: queryKey(projectId, 'hypotheses', { status, type, cursor }),
@@ -114,8 +118,11 @@ export default function Hypotheses() {
         }
       />
       <Banner>
-        Извлечённое значение подтверждает только результат разбора. PASS не меняет статус смысловой
-        гипотезы.
+        Наблюдение описывает увиденное: «в этом участке прочитано 200». Гипотеза объясняет смысл:
+        «это период в миллисекундах». Прикрепи сохранённые связи с байтами как примеры или
+        контрпримеры. Извлечённое значение подтверждает только результат разбора. PASS не меняет
+        статус смысловой гипотезы.{' '}
+        <Link to={'/projects/' + projectId + '/guide#fields'}>Посмотреть пример →</Link>
       </Banner>
       <div className="form-grid">
         <Field label="Тип записи" error={typeProblem}>
@@ -148,6 +155,7 @@ export default function Hypotheses() {
               <option value="open">Открыта</option>
               <option value="supported">Поддерживается примерами</option>
               <option value="refuted">Опровергнута</option>
+              <option value="inconclusive">Недостаточно данных</option>
             </select>
           )}
         </Field>
@@ -170,6 +178,12 @@ export default function Hypotheses() {
                       {item.type === 'hypothesis' ? 'Гипотеза' : 'Наблюдение'}
                     </span>
                     <h2>{item.text}</h2>
+                    {item.generation && (
+                      <small className="automatic-origin">
+                        Создано из данных · {item.generation.engineVersion} ·{' '}
+                        {item.generation.matches}/{item.generation.total} примеров
+                      </small>
+                    )}
                   </div>
                   <div className="toolbar">
                     <Button disabled={query.isFetching} onClick={() => edit(item)}>
@@ -192,6 +206,16 @@ export default function Hypotheses() {
                   <code>{item.hypothesisId}</code>
                 </div>
                 <p>{item.basis}</p>
+                {item.legacyEvidence?.map((proof) => (
+                  <p className="mono" key={proof.evidenceId}>
+                    Исходное доказательство: SHA256 {proof.captureSha256}, пакет {proof.packetNo},
+                    байты [{proof.frameOffset}, {proof.frameOffset + proof.byteLength}),{' '}
+                    {proof.kind}, {proof.selected ? 'выбрано' : 'не выбрано'}
+                    {proof.assemblyId
+                      ? ` · сборка ${proof.assemblyId}, поток ${proof.streamId}, смещение ${proof.streamOffset}`
+                      : ''}
+                  </p>
+                ))}
                 <div className="evidence-grid">
                   {item.evidence.map((proof) => (
                     <div key={proof.evidenceId} className={'evidence-card ' + proof.kind}>
@@ -292,6 +316,7 @@ export default function Hypotheses() {
                   <option value="open">Открыта</option>
                   <option value="supported">Поддерживается примерами</option>
                   <option value="refuted">Опровергнута</option>
+                  <option value="inconclusive">Недостаточно данных</option>
                 </select>
               )}
             </Field>

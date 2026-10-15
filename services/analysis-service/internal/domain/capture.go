@@ -21,6 +21,7 @@ type Interval struct {
 }
 
 type Source struct {
+	Timestamp     string `json:"timestamp,omitempty"`
 	AlternativeID string `json:"alternativeId"`
 	FrameStart    uint64 `json:"frameStart"`
 	FrameEnd      uint64 `json:"frameEnd"`
@@ -30,15 +31,19 @@ type Source struct {
 }
 
 type Block struct {
-	AssemblyID string     `json:"assemblyId"`
-	StreamID   string     `json:"streamId"`
-	Offset     uint64     `json:"offset"`
-	Length     uint64     `json:"length"`
-	Intervals  []Interval `json:"intervals"`
-	Sources    []Source   `json:"sources"`
+	CaptureID   string     `json:"captureId,omitempty"`
+	CaptureName string     `json:"captureName,omitempty"`
+	Direction   string     `json:"direction,omitempty"`
+	AssemblyID  string     `json:"assemblyId"`
+	StreamID    string     `json:"streamId"`
+	Offset      uint64     `json:"offset"`
+	Length      uint64     `json:"length"`
+	Intervals   []Interval `json:"intervals"`
+	Sources     []Source   `json:"sources"`
 }
 
 type Stream struct {
+	SessionID     string `json:"sessionId,omitempty"`
 	StreamID      string `json:"streamId"`
 	LogicalLength uint64 `json:"logicalLength"`
 }

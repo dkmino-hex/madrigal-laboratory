@@ -1,4 +1,4 @@
-// Временные frontend DTO. Не являются согласованным OpenAPI BASE-02.
+// Проверяемые модели интерфейса. HTTP DTO сервисов преобразуются в shared/api/live.
 import { z } from 'zod';
 import { decimalSchema as d, timestampSchema } from '../../model/precision';
 
@@ -130,13 +130,39 @@ export const evidenceSchema = z.object({
   revisionId: id.optional(),
   runId: id.optional(),
 });
+export const generationSchema = z.object({
+  engineVersion: z.string(),
+  fingerprint: z.string(),
+  candidateId: z.string(),
+  kind: z.enum(['parameter', 'constant', 'variable', 'selection']),
+  parameter: z.string().optional(),
+  matches: z.number().int().nonnegative(),
+  total: z.number().int().nonnegative(),
+});
 export const hypothesisSchema = z.object({
+  generation: generationSchema.optional(),
   hypothesisId: id,
   projectId: id,
   type: z.enum(['observation', 'hypothesis']),
   text: z.string(),
   basis: z.string(),
-  status: z.enum(['open', 'supported', 'refuted']),
+  status: z.enum(['open', 'supported', 'refuted', 'inconclusive']),
+  legacyEvidence: z
+    .array(
+      z.object({
+        evidenceId: id,
+        kind: z.string(),
+        captureSha256: z.string(),
+        packetNo: z.number().int().positive(),
+        frameOffset: z.number().int().nonnegative(),
+        byteLength: z.number().int().positive(),
+        selected: z.boolean(),
+        assemblyId: id.optional(),
+        streamId: id.optional(),
+        streamOffset: z.number().int().nonnegative().optional(),
+      }),
+    )
+    .optional(),
   evidence: z.array(evidenceSchema),
 });
 export const revisionSchema = z.object({
@@ -183,6 +209,8 @@ export const previewSchema = z.object({
   diagnostic: z.string().optional(),
 });
 export const manifestSchema = z.object({
+  actionSnapshotCount: d.optional(),
+  actionsComplete: z.boolean().optional(),
   revisionId: id,
   settingsVersion: id,
   engineVersion: z.string(),
@@ -197,6 +225,7 @@ export const summarySchema = z.object({
   captures: d,
   sessions: d,
   rules: z.record(checkStatus, d),
+  messageStatuses: z.record(checkStatus, d).optional(),
   complete: z.boolean(),
 });
 export const runSchema = z.object({

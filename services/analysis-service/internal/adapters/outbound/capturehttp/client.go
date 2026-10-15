@@ -137,7 +137,10 @@ func (c *Client) Streams(ctx context.Context, project, assembly string) ([]domai
 			if err := c.request(ctx, "GET", detailPath, nil, &detail); err != nil {
 				return nil, err
 			}
-			result = append(result, detail.Streams...)
+			for _, stream := range detail.Streams {
+				stream.SessionID = s.SessionID
+				result = append(result, stream)
+			}
 		}
 		next := page.NextCursor
 		if next == "" {

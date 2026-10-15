@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import * as dto from './contracts/draft';
+import * as dto from './contracts/models';
 import { ApiError, request, type RequestOptions } from './transport';
 import { sameContext } from '../model/navigation';
 import { segmentLength } from '../model/bytes';
+import { discoverySchema, type DiscoveryInput, type AutomaticInput } from './contracts/research';
 
 // Точка DTO → VM: компоненты получают проверенные предметные модели, без envelope.
 export const adaptWindow = (value: dto.ByteWindow): dto.ByteWindow => ({
@@ -48,6 +49,22 @@ const ownJobResult = (
   (!data.artifact || data.artifact.projectId === projectId) &&
   (!data.run || data.run.projectId === projectId);
 export const api = {
+  discover: (params: DiscoveryInput, options?: RequestOptions) =>
+    checked(
+      request('discover', params, discoverySchema, options),
+      (data) =>
+        data.projectId === params.projectId &&
+        data.rows.every(
+          (row) =>
+            row.location.projectId === params.projectId &&
+            row.sources.every((source) => source.captureId === row.location.captureId),
+        ),
+    ),
+  saveAutomaticObservation: (params: AutomaticInput, options?: RequestOptions) =>
+    checked(
+      request('saveAutomaticObservation', params, dto.hypothesisSchema, options),
+      (data) => data.projectId === params.projectId,
+    ),
   projects: (params: Record<string, unknown> = {}, options?: RequestOptions) =>
     request('projects', params, dto.pageSchema(dto.projectSchema), options),
   project: (projectId: string, options?: RequestOptions) =>
@@ -192,11 +209,14 @@ export const api = {
     request(
       'importActions',
       params,
-      z.object({
-        imported: z.number().int(),
-        partial: z.boolean(),
-        errors: z.array(z.object({ row: z.number().int(), reason: z.string() })),
-      }),
+      z.union([
+        fileResult,
+        z.object({
+          imported: z.number().int(),
+          partial: z.boolean(),
+          errors: z.array(z.object({ row: z.number().int(), reason: z.string() })),
+        }),
+      ]),
       options,
     ),
   evidence: (params: Record<string, unknown>, options?: RequestOptions) =>

@@ -26,6 +26,7 @@ type Job struct {
 	ID              string          `json:"jobId"`
 	ProjectID       string          `json:"projectId"`
 	Kind            string          `json:"kind"`
+	Owner           string          `json:"owner"`
 	ResourceID      *string         `json:"resourceId,omitempty"`
 	Status          string          `json:"status"`
 	Stage           string          `json:"stage"`
@@ -73,11 +74,16 @@ func (s Store) EnqueueTx(ctx context.Context, tx *sql.Tx, projectID, kind string
 	if err != nil {
 		return Job{}, err
 	}
-	return scan(tx.QueryRowContext(ctx, "INSERT INTO jobs(id,project_id,kind,resource_id,payload_json) VALUES(?1,?2,?3,?4,?5) RETURNING "+columns, identifier.New(s.Prefix), projectID, kind, resourceID, string(data)))
+	return s.owned(scan(tx.QueryRowContext(ctx, "INSERT INTO jobs(id,project_id,kind,resource_id,payload_json) VALUES(?1,?2,?3,?4,?5) RETURNING "+columns, identifier.New(s.Prefix), projectID, kind, resourceID, string(data))))
 }
 
 func (s Store) Get(ctx context.Context, id string) (Job, error) {
-	return scan(s.DB.QueryRowContext(ctx, "SELECT "+columns+" FROM jobs WHERE id=?1", id))
+	return s.owned(scan(s.DB.QueryRowContext(ctx, "SELECT "+columns+" FROM jobs WHERE id=?1", id)))
+}
+
+func (s Store) owned(job Job, err error) (Job, error) {
+	job.Owner = map[string]string{"cap": "Capture", "ws": "Workspace"}[s.Prefix]
+	return job, err
 }
 
 func (s Store) Claim(ctx context.Context, kinds []string) (Job, error) {
@@ -102,7 +108,7 @@ func (s Store) Claim(ctx context.Context, kinds []string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	return j, tx.Commit()
+	return s.owned(j, tx.Commit())
 }
 
 func (s Store) Progress(ctx context.Context, id, stage string, completed int64, total *int64) error {
@@ -202,7 +208,7 @@ func (s Store) Cancel(ctx context.Context, id string) (Job, error) {
 	if err != nil {
 		return Job{}, err
 	}
-	return j, tx.Commit()
+	return s.owned(j, tx.Commit())
 }
 
 func (s Store) Recover(ctx context.Context) error {

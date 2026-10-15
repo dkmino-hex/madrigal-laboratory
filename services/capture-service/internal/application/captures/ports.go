@@ -24,6 +24,7 @@ type ProjectContexts interface {
 
 // Repository keeps atomic Capture writes and read models behind the storage boundary.
 type Repository interface {
+	AssemblySettings(context.Context, string, string) (json.RawMessage, error)
 	PingContext(context.Context) error
 	Jobs() jobs.Store
 	ForEachCapture(context.Context, func(Capture) error) error
@@ -36,8 +37,10 @@ type Repository interface {
 	ListCaptures(ctx context.Context, projectID, cursorToken string, limit int) (map[string]any, error)
 	Packet(ctx context.Context, projectID, captureID string, n int64) (map[string]any, error)
 	Assemblies(ctx context.Context, projectID, captureID string) (map[string]any, error)
+	ResearchData(context.Context, string, string, string, int64) (domain.ResearchData, error)
 	Search(ctx context.Context, assemblyID, streamID string, pattern []byte, cursor int64, limit int) (map[string]any, error)
 	StreamInfo(ctx context.Context, projectID string, assemblyID, streamID string) (int64, error)
+	StreamReadContext(context.Context, string, string) (map[string]any, error)
 	StreamIntervals(ctx context.Context, projectID string, assemblyID, streamID string, offset, length int64) ([]map[string]any, error)
 	StreamIntervalsUnchecked(ctx context.Context, assemblyID, streamID string, offset, length int64) ([]map[string]any, error)
 	SourceSpans(ctx context.Context, projectID string, assemblyID, streamID string, offset, length int64) ([]map[string]any, error)

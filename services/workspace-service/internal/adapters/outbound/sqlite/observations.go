@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"strings"
 
 	"github.com/dkmino-hex/madrigal-laboratory/platform/identifier"
@@ -39,8 +40,21 @@ func (s Store) PersistObservation(ctx context.Context, projectID string, in Obse
 		}
 		action = in.ActionID
 	}
+	hash, err := mutationHash(in)
+	if err != nil {
+		return nil, err
+	}
+	scope := "observations:" + projectID
+	var cached map[string]any
+	seen, err := replayMutation(ctx, tx, scope, in.IdempotencyKey, hash, &cached)
+	if err != nil {
+		return nil, err
+	}
+	if seen {
+		return cached, tx.Commit()
+	}
 	id := identifier.New("obs")
-	_, err = tx.ExecContext(ctx, "INSERT INTO observations(id,project_id,kind,text,status,action_id) VALUES(?1,?2,?3,?4,?5,?6)", id, projectID, in.Kind, strings.TrimSpace(in.Text), in.Status, action)
+	_, err = tx.ExecContext(ctx, "INSERT INTO observations(id,project_id,kind,text,status,action_id,basis) VALUES(?1,?2,?3,?4,?5,?6,?7)", id, projectID, in.Kind, strings.TrimSpace(in.Text), in.Status, action, in.Basis)
 	if err != nil {
 		return nil, err
 	}
@@ -54,20 +68,36 @@ func (s Store) PersistObservation(ctx context.Context, projectID string, in Obse
 			return nil, err
 		}
 	}
-	if err = tx.Commit(); err != nil {
+	if err = replaceObservationLinks(ctx, tx, projectID, id, in.Links); err != nil {
 		return nil, err
 	}
-	return s.Observation(ctx, projectID, id)
-}
-
-func (s Store) Observation(ctx context.Context, projectID, id string) (map[string]any, error) {
-	var kind, text, status, created, updated string
-	var action sql.NullString
-	err := s.DB.QueryRowContext(ctx, "SELECT kind,text,status,action_id,created_at,updated_at FROM observations WHERE project_id=?1 AND id=?2", projectID, id).Scan(&kind, &text, &status, &action, &created, &updated)
+	result, err := observation(ctx, tx, projectID, id)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT id,kind,capture_sha256,packet_no,frame_offset,byte_length,assembly_id,stream_id,stream_offset,selected FROM evidence WHERE observation_id=?1 ORDER BY id", id)
+	if err = rememberMutation(ctx, tx, scope, in.IdempotencyKey, hash, id, 201, result); err != nil {
+		return nil, err
+	}
+	return result, tx.Commit()
+}
+
+func (s Store) Observation(ctx context.Context, projectID, id string) (map[string]any, error) {
+	return observation(ctx, s.DB, projectID, id)
+}
+
+type observationReader interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func observation(ctx context.Context, db observationReader, projectID, id string) (map[string]any, error) {
+	var kind, text, status, created, updated, basis, generation string
+	var action sql.NullString
+	err := db.QueryRowContext(ctx, "SELECT kind,text,status,action_id,created_at,updated_at,basis,generation_json FROM observations WHERE project_id=?1 AND id=?2", projectID, id).Scan(&kind, &text, &status, &action, &created, &updated, &basis, &generation)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.QueryContext(ctx, "SELECT id,kind,capture_sha256,packet_no,frame_offset,byte_length,assembly_id,stream_id,stream_offset,selected FROM evidence WHERE observation_id=?1 ORDER BY id", id)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +123,33 @@ func (s Store) Observation(ctx context.Context, projectID, id string) (map[strin
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return map[string]any{"observationId": id, "kind": kind, "text": text, "status": status, "actionId": action.String, "evidence": evidence, "createdAt": created, "updatedAt": updated}, nil
+	rows.Close()
+	links, err := db.QueryContext(ctx, "SELECT l.data_json,o.kind FROM source_links l JOIN observation_source_links o ON o.link_id=l.id AND o.project_id=l.project_id WHERE o.project_id=? AND o.observation_id=? ORDER BY l.id", projectID, id)
+	if err != nil {
+		return nil, err
+	}
+	defer links.Close()
+	linked := []domain.SourceLink{}
+	for links.Next() {
+		var raw, role string
+		var link domain.SourceLink
+		if err = links.Scan(&raw, &role); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal([]byte(raw), &link); err != nil {
+			return nil, err
+		}
+		link.Kind = role
+		linked = append(linked, link)
+	}
+	if err = links.Err(); err != nil {
+		return nil, err
+	}
+	result := map[string]any{"observationId": id, "kind": kind, "text": text, "status": status, "actionId": action.String, "evidence": evidence, "createdAt": created, "updatedAt": updated, "basis": basis, "sourceLinks": linked}
+	if generation != "{}" {
+		result["generation"] = json.RawMessage(generation)
+	}
+	return result, nil
 }
 
 func (s Store) Observations(ctx context.Context, projectID, cursor, kind, status, source string, limit int) (map[string]any, error) {
@@ -107,7 +163,7 @@ func (s Store) Observations(ctx context.Context, projectID, cursor, kind, status
 	if project.Status != "READY" {
 		return nil, ErrProjectNotReady
 	}
-	query := `SELECT id FROM observations o WHERE o.project_id=?1 AND o.id>?2 AND (?3='' OR o.kind=?3) AND (?4='' OR o.status=?4) AND (?5='' OR EXISTS(SELECT 1 FROM evidence e WHERE e.observation_id=o.id AND e.capture_sha256=?5)) ORDER BY o.id LIMIT ?6`
+	query := `SELECT id FROM observations o WHERE o.project_id=?1 AND o.id>?2 AND (?3='' OR o.kind=?3) AND (?4='' OR o.status=?4) AND (?5='' OR EXISTS(SELECT 1 FROM evidence e WHERE e.observation_id=o.id AND e.capture_sha256=?5) OR EXISTS(SELECT 1 FROM observation_source_links ol JOIN source_links sl ON sl.id=ol.link_id AND sl.project_id=ol.project_id WHERE ol.project_id=o.project_id AND ol.observation_id=o.id AND json_extract(sl.data_json,'$.captureSha256')=?5)) ORDER BY o.id LIMIT ?6`
 	rows, err := s.DB.QueryContext(ctx, query, projectID, cursor, kind, status, source, limit+1)
 	if err != nil {
 		return nil, err
@@ -158,6 +214,19 @@ func (s Store) PatchObservation(ctx context.Context, projectID, id string, in Ob
 	if projectStatus != "READY" {
 		return nil, ErrProjectNotReady
 	}
+	hash, err := mutationHash(in)
+	if err != nil {
+		return nil, err
+	}
+	scope := "observations:" + projectID + ":" + id
+	var cached map[string]any
+	seen, err := replayMutation(ctx, tx, scope, in.IdempotencyKey, hash, &cached)
+	if err != nil {
+		return nil, err
+	}
+	if seen {
+		return cached, tx.Commit()
+	}
 	var exists int
 	if err = tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM observations WHERE project_id=?1 AND id=?2", projectID, id).Scan(&exists); err != nil {
 		return nil, err
@@ -188,21 +257,36 @@ func (s Store) PatchObservation(ctx context.Context, projectID, id string, in Ob
 			}
 		}
 	}
-	var textValue, statusValue any
+	if in.Links != nil {
+		if err = replaceObservationLinks(ctx, tx, projectID, id, *in.Links); err != nil {
+			return nil, err
+		}
+	}
+	var textValue, statusValue, basisValue, kindValue any
+	if in.Kind != nil {
+		kindValue = *in.Kind
+	}
+	if in.Basis != nil {
+		basisValue = *in.Basis
+	}
 	if in.Text != nil {
 		textValue = strings.TrimSpace(*in.Text)
 	}
 	if in.Status != nil {
 		statusValue = *in.Status
 	}
-	_, err = tx.ExecContext(ctx, "UPDATE observations SET text=coalesce(?3,text),status=coalesce(?4,status),updated_at=(strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE project_id=?1 AND id=?2", projectID, id, textValue, statusValue)
+	_, err = tx.ExecContext(ctx, "UPDATE observations SET text=coalesce(?3,text),status=coalesce(?4,status),basis=coalesce(?5,basis),kind=coalesce(?6,kind),updated_at=(strftime('%Y-%m-%dT%H:%M:%fZ','now')) WHERE project_id=?1 AND id=?2", projectID, id, textValue, statusValue, basisValue, kindValue)
 	if err != nil {
 		return nil, err
 	}
-	if err = tx.Commit(); err != nil {
+	result, err := observation(ctx, tx, projectID, id)
+	if err != nil {
 		return nil, err
 	}
-	return s.Observation(ctx, projectID, id)
+	if err = rememberMutation(ctx, tx, scope, in.IdempotencyKey, hash, id, 200, result); err != nil {
+		return nil, err
+	}
+	return result, tx.Commit()
 }
 
 var ErrSourceUnavailable = domain.ErrSourceUnavailable

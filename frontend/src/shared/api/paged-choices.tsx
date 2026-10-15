@@ -39,7 +39,11 @@ export function usePagedChoices<T>(
   const seen = new Map<string, number>();
   const items: T[] = [];
   for (const item of query.data?.pages.flatMap((page) => page.items) ?? []) {
-    const id = identify(item);
+    const identityValue = identify(item);
+    const id =
+      operation === 'assemblies' && item && typeof item === 'object'
+        ? String(identityValue) + ':' + String(Reflect.get(item, 'streamId'))
+        : identityValue;
     if (typeof id === 'string' && seen.has(id)) items[seen.get(id)!] = item;
     else {
       if (typeof id === 'string') seen.set(id, items.length);

@@ -56,7 +56,7 @@ export function UploadWidget({
     },
     onSuccess: async (result) => {
       if ('job' in result) {
-        const resourceProject = result.project?.projectId ?? projectId!;
+        const resourceProject = result.project?.projectId ?? result.job.projectId;
         trackJob(resourceProject, result.job.jobId);
         setJob({ projectId: resourceProject, jobId: result.job.jobId });
         setNotice(

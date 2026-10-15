@@ -1,19 +1,9 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import { config, gatewayUrl, publicGatewayPath } from '../../app/config';
-import { draftMapping, gatewayMapping, type Operation } from './registry';
+import { draftMapping, gatewayMapping, type Operation, type WireOperation } from './registry';
 
-export class ApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public requestId?: string,
-    public details?: unknown,
-    public httpStatus?: number,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
+import { ApiError } from './errors';
+export { ApiError } from './errors';
 export const createRequestKey = () => crypto.randomUUID();
 export function logicalRequest() {
   let previous = '';
@@ -39,7 +29,11 @@ function redactedDetails(details: unknown): unknown {
     );
   return details;
 }
-export async function decodeResponse<T>(response: Response, schema: z.ZodType<T>): Promise<T> {
+export async function decodeResponse<T>(
+  response: Response,
+  schema: z.ZodType<T>,
+  raw = false,
+): Promise<T> {
   const requestId = response.headers.get('x-request-id') ?? undefined;
   const type = response.headers.get('content-type') ?? '';
   if (!type.includes('application/json'))
@@ -59,7 +53,12 @@ export async function decodeResponse<T>(response: Response, schema: z.ZodType<T>
   if (!response.ok) {
     const data = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
     const error =
-      data.error && typeof data.error === 'object' ? (data.error as Record<string, unknown>) : {};
+      data.error && typeof data.error === 'object'
+        ? (data.error as Record<string, unknown>)
+        : {
+            code: data.code,
+            message: data.message ?? (typeof data.error === 'string' ? data.error : undefined),
+          };
     throw new ApiError(
       typeof error.code === 'string' ? error.code : 'HTTP_ERROR',
       String(
@@ -75,7 +74,7 @@ export async function decodeResponse<T>(response: Response, schema: z.ZodType<T>
     );
   }
   const envelope = body as { data?: unknown; requestId?: string };
-  const parsed = schema.safeParse(envelope?.data);
+  const parsed = schema.safeParse(raw ? body : envelope?.data);
   if (!parsed.success)
     throw new ApiError(
       'INCOMPATIBLE_RESPONSE',
@@ -93,14 +92,16 @@ export type RequestOptions = {
 };
 let mockGeneration = 0;
 let mockRecovery: Promise<void> | undefined;
-export async function request<T>(
-  operation: Operation,
+async function send<T>(
+  operation: WireOperation,
   params: Record<string, unknown>,
   schema: z.ZodType<T>,
   options: RequestOptions = {},
+  raw = false,
 ): Promise<T> {
   const requestMockGeneration = mockGeneration;
-  const mapping = config.mode === 'mock' ? draftMapping(operation) : gatewayMapping[operation];
+  const mapping =
+    config.mode === 'mock' ? draftMapping(operation as Operation) : gatewayMapping[operation];
   if (!mapping)
     throw new ApiError(
       'CONTRACT_PENDING',
@@ -133,17 +134,24 @@ export async function request<T>(
   if (mapping.idempotent && options.idempotencyKey)
     headers['Idempotency-Key'] = options.idempotencyKey;
   let body: BodyInit | undefined;
-  if (options.file) {
+  if (options.file && mapping.method !== 'GET') {
     const form = new FormData();
     form.set('file', options.file);
     for (const [key, value] of Object.entries(params))
-      form.set(key, typeof value === 'string' ? value : JSON.stringify(value));
+      if (value !== undefined && value !== null)
+        form.set(key, typeof value === 'string' ? value : JSON.stringify(value));
     body = form;
   } else if (mapping.method !== 'GET') {
     headers['Content-Type'] = 'application/json';
-    body = JSON.stringify(params);
+    body = JSON.stringify(
+      config.mode === 'api'
+        ? Object.fromEntries(Object.entries(params).filter(([key]) => !used.has(key)))
+        : params,
+    );
   }
-  const timeout = AbortSignal.timeout(options.timeoutMs ?? 15000);
+  const timeout = AbortSignal.timeout(
+    options.timeoutMs ?? (options.file && mapping.method !== 'GET' ? 15 * 60 * 1000 : 15000),
+  );
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
   try {
     const execute = () =>
@@ -155,7 +163,7 @@ export async function request<T>(
         credentials: 'same-origin',
       });
     try {
-      return await decodeResponse(await execute(), schema);
+      return await decodeResponse(await execute(), schema, raw);
     } catch (error) {
       // A stopped development worker used to expose Vite's HTML fallback as API data.
       // Restore interception once for reads. Mutations never repeat automatically.
@@ -180,7 +188,7 @@ export async function request<T>(
             });
           await mockRecovery;
         }
-        return await decodeResponse(await execute(), schema);
+        return await decodeResponse(await execute(), schema, raw);
       }
       throw error;
     }
@@ -201,6 +209,30 @@ export async function request<T>(
         : 'Результат запроса неизвестен. Перечитайте состояние; повторите тот же запрос с тем же ключом.',
     );
   }
+}
+export async function request<T>(
+  operation: Operation,
+  params: Record<string, unknown>,
+  schema: z.ZodType<T>,
+  options: RequestOptions = {},
+): Promise<T> {
+  if (config.mode === 'mock') return send(operation, params, schema, options);
+  if (!gatewayMapping[operation])
+    throw new ApiError('CONTRACT_PENDING', 'Для операции не настроен публичный API.');
+  const { liveRequest } = await import('./live');
+  const value = await liveRequest(operation, params, {
+    options,
+    wire: (op, input, opts) => send(op, input, z.unknown(), opts, true),
+  });
+  const parsed = schema.safeParse(value);
+  if (!parsed.success)
+    throw new ApiError(
+      'INCOMPATIBLE_RESPONSE',
+      'Ответ не соответствует модели интерфейса.',
+      undefined,
+      parsed.error.issues.map(({ path, message }) => ({ path: path.join('.'), message })),
+    );
+  return parsed.data;
 }
 export function safeArtifactUrl(path: string) {
   const url = new URL(path, gatewayUrl('/'));

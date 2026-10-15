@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { JobCard } from './Jobs';
 import { api } from '../../shared/api/client';
-import type { Job } from '../../shared/api/contracts/draft';
+import type { Job } from '../../shared/api/contracts/models';
 import { decimal } from '../../shared/model/precision';
 
 afterEach(() => vi.restoreAllMocks());

@@ -70,7 +70,7 @@ func registerCapture(mux *http.ServeMux, store captures.Store) {
 			return
 		}
 		w.Header().Set("Location", "/api/v1/jobs/"+j.ID)
-		httpapi.JSON(w, 202, map[string]any{"captureId": c.ID, "jobId": j.ID, "status": c.Status, "sha256": c.SHA256, "duplicate": duplicate})
+		httpapi.JSON(w, 202, map[string]any{"captureId": c.ID, "jobId": j.ID, "status": c.Status, "sha256": c.SHA256, "duplicate": duplicate, "job": j})
 	})
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/captures", func(w http.ResponseWriter, r *http.Request) {
 		limit, err := httpapi.Limit(r)

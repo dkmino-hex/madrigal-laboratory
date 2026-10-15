@@ -7,10 +7,17 @@ import (
 )
 
 func New(repo service.Repository, client service.Capture, runs *service.RunsService) http.Handler {
-	interpretationHandler := NewInterpretationHandler(service.NewInterpretationService(repo))
+	var workspace service.Workspace
+	if runs != nil {
+		workspace = runs.Workspace
+	}
+	interpretationHandler := NewInterpretationHandler(service.NewInterpretationService(repo, workspace))
 	snapshotHandler := NewSnapshotHandler(repo, client)
-	analysisHandler := &AnalysisHandler{Preview: &service.PreviewService{Repo: repo, Capture: client}, Runs: runs, Repo: repo}
+	analysisHandler := &AnalysisHandler{Preview: &service.PreviewService{Repo: repo, Capture: client, Workspace: workspace}, Runs: runs, Repo: repo}
 	mux := http.NewServeMux()
+	researchCapture, _ := client.(service.ResearchCapture)
+	researchWorkspace, _ := workspace.(service.ResearchWorkspace)
+	registerResearch(mux, service.ResearchService{Capture: researchCapture, Workspace: researchWorkspace, Repo: repo})
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -32,6 +39,7 @@ func New(repo service.Repository, client service.Capture, runs *service.RunsServ
 		interpretationHandler.List,
 	)
 
+	mux.HandleFunc("GET /api/v1/projects/{projectId}/interpretations/{interpretationId}", interpretationHandler.Get)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions", interpretationHandler.CreateRevision)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions", interpretationHandler.ListRevisions)
 	mux.HandleFunc("GET /api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions/{revisionId}", interpretationHandler.GetRevision)

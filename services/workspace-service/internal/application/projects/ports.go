@@ -11,12 +11,13 @@ import (
 
 type Repository interface {
 	PersistObservation(ctx context.Context, projectID string, in ObservationInput) (map[string]any, error)
+	PersistAutomaticObservation(context.Context, string, domain.AutomaticObservation) (map[string]any, error)
 	Observation(ctx context.Context, projectID, id string) (map[string]any, error)
 	Observations(ctx context.Context, projectID, cursor, kind, status, source string, limit int) (map[string]any, error)
 	PatchObservation(ctx context.Context, projectID, id string, in ObservationPatch) (map[string]any, error)
 	Create(ctx context.Context, input CreateInput, key string) (Project, bool, error)
 	Get(ctx context.Context, id string) (Project, error)
-	List(ctx context.Context, token string, limit int) (Page, error)
+	List(ctx context.Context, token string, limit int, search ...string) (Page, error)
 	SettingsContext(ctx context.Context, projectID, version string) (Context, error)
 	UpdateSettings(ctx context.Context, projectID string, settings map[string]any, key string) (SettingsVersion, bool, error)
 	CreateSnapshot(ctx context.Context, projectID string) (Snapshot, error)
@@ -38,6 +39,12 @@ type Repository interface {
 	SetArtifact(ctx context.Context, id, name, hash string, size int64) error
 	ForEachJournal(ctx context.Context, projectID string, visit func(string, string) error) error
 	Artifact(ctx context.Context, id string) (domain.Artifact, error)
+	Settings(ctx context.Context, projectID, version string) ([]SettingsVersion, error)
+	Artifacts(ctx context.Context, projectID, cursor string, limit int) (map[string]any, error)
+	JournalImport(ctx context.Context, projectID, id string) (JournalImport, error)
+	Links(ctx context.Context, projectID, cursor, actionID string, limit int) (map[string]any, error)
+	PersistLink(ctx context.Context, projectID string, link domain.SourceLink, key string) (domain.SourceLink, error)
+	DeleteObservation(ctx context.Context, projectID, id string) error
 }
 
 type PeerClient interface {

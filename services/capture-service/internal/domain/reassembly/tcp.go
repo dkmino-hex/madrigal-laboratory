@@ -7,6 +7,7 @@ import (
 )
 
 type segment struct {
+	excluded   bool
 	start      int64
 	data       []byte
 	packetNo   int
@@ -20,6 +21,7 @@ type boundary struct {
 }
 
 type directionBuilder struct {
+	checksum string
 	packets  []Packet
 	segments []segment
 	baseSeq  uint32
@@ -43,7 +45,11 @@ func tupleKey(a, b Endpoint) string {
 	return x + "|" + y
 }
 
-func BuildSessions(captureID, assemblyID string, packets []Packet) []Session {
+func BuildSessions(captureID, assemblyID string, packets []Packet, checksumPolicy ...string) []Session {
+	policy := "warn"
+	if len(checksumPolicy) > 0 {
+		policy = checksumPolicy[0]
+	}
 	groups := map[string][]*sessionBuilder{}
 	ordered := make([]*sessionBuilder, 0)
 	for _, p := range packets {
@@ -93,6 +99,7 @@ func BuildSessions(captureID, assemblyID string, packets []Packet) []Session {
 			dir = 1
 		}
 		d := &current.dirs[dir]
+		d.checksum = policy
 		d.packets = append(d.packets, p)
 		if !d.seen {
 			d.baseSeq = p.Sequence
@@ -135,6 +142,7 @@ func assemble(id, direction string, d *directionBuilder) Stream {
 		base = int64(int32(*d.synSeq-d.baseSeq)) + 1
 	}
 	first := true
+	checksumDiagnostic := false
 	for _, p := range d.packets {
 		if p.PayloadLength == 0 {
 			continue
@@ -147,7 +155,16 @@ func assemble(id, direction string, d *directionBuilder) Stream {
 			base = start
 			first = false
 		}
-		d.segments = append(d.segments, segment{start: start, data: p.Frame[p.PayloadStart : p.PayloadStart+p.PayloadLength], packetNo: p.Number, frameStart: p.PayloadStart})
+		excluded := p.ChecksumStatus == "INVALID" && d.checksum == "strict"
+		if p.ChecksumStatus == "INVALID" && d.checksum != "ignore" && !checksumDiagnostic {
+			message := "invalid TCP checksum; payload retained"
+			if excluded {
+				message = "invalid TCP checksum; payload excluded by strict policy"
+			}
+			out.Diagnostic = append(out.Diagnostic, message)
+			checksumDiagnostic = true
+		}
+		d.segments = append(d.segments, segment{excluded: excluded, start: start, data: p.Frame[p.PayloadStart : p.PayloadStart+p.PayloadLength], packetNo: p.Number, frameStart: p.PayloadStart})
 	}
 	if len(d.segments) == 0 {
 		return out
@@ -169,7 +186,7 @@ func assemble(id, direction string, d *directionBuilder) Stream {
 			out.Diagnostic = append(out.Diagnostic, "payload precedes observed SYN; excluded")
 			continue
 		}
-		events = append(events, boundary{pos: s.start, segment: i, start: true}, boundary{pos: s.start + int64(len(s.data)), segment: i})
+		events = append(events, boundary{pos: s.start, segment: i, start: !s.excluded}, boundary{pos: s.start + int64(len(s.data)), segment: i})
 	}
 	sort.Slice(events, func(i, j int) bool { return events[i].pos < events[j].pos })
 	active := map[int]bool{}

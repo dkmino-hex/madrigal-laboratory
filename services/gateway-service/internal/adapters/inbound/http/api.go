@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func New(workspaceProxy, captureProxy, analysisProxy http.Handler, allowedOrigin string) http.Handler {
+func New(workspaceProxy, captureProxy, analysisProxy http.Handler, allowedOrigin string, staticDirectory ...string) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -18,10 +18,19 @@ func New(workspaceProxy, captureProxy, analysisProxy http.Handler, allowedOrigin
 	mux.Handle("POST /api/v1/projects", workspaceProxy)
 	mux.Handle("GET /api/v1/projects/{projectId}", workspaceProxy)
 	mux.Handle("PATCH /api/v1/projects/{projectId}/settings", workspaceProxy)
+	mux.Handle("GET /api/v1/projects/{projectId}/settings", workspaceProxy)
+	mux.Handle("GET /api/v1/projects/{projectId}/artifacts", workspaceProxy)
+	mux.Handle("GET /api/v1/projects/{projectId}/evidence", workspaceProxy)
+	mux.Handle("POST /api/v1/projects/{projectId}/evidence", workspaceProxy)
+	mux.Handle("PATCH /api/v1/projects/{projectId}/evidence/{evidenceId}", workspaceProxy)
+	mux.Handle("GET /api/v1/projects/{projectId}/action-log/{importId}", workspaceProxy)
+	mux.Handle("DELETE /api/v1/projects/{projectId}/observations/{observationId}", workspaceProxy)
 	mux.Handle("POST /api/v1/projects/import", workspaceProxy)
 	mux.Handle("POST /api/v1/projects/{projectId}/action-log", workspaceProxy)
 	mux.Handle("GET /api/v1/projects/{projectId}/actions", workspaceProxy)
 	mux.Handle("POST /api/v1/projects/{projectId}/observations", workspaceProxy)
+	mux.Handle("POST /api/v1/projects/{projectId}/observations/automatic", workspaceProxy)
+	mux.Handle("POST /api/v1/projects/{projectId}/discoveries", analysisProxy)
 	mux.Handle("GET /api/v1/projects/{projectId}/observations", workspaceProxy)
 	mux.Handle("PATCH /api/v1/projects/{projectId}/observations/{observationId}", workspaceProxy)
 	mux.Handle("POST /api/v1/projects/{projectId}/exports", workspaceProxy)
@@ -46,26 +55,40 @@ func New(workspaceProxy, captureProxy, analysisProxy http.Handler, allowedOrigin
 	mux.Handle("GET /api/v1/projects/{projectId}/streams/{streamId}/search", captureProxy)
 
 	mux.Handle("/api/v1/projects/{projectId}/interpretations", analysisProxy)
+	mux.Handle("GET /api/v1/analysis/health", analysisProxy)
 	mux.Handle("/api/v1/projects/{projectId}/interpretations/{rest...}", analysisProxy)
 	mux.Handle("/api/v1/projects/{projectId}/previews", analysisProxy)
 	mux.Handle("/api/v1/projects/{projectId}/runs", analysisProxy)
 	mux.Handle("/api/v1/projects/{projectId}/runs/{rest...}", analysisProxy)
+	directory := ""
+	if len(staticDirectory) > 0 {
+		directory = staticDirectory[0]
+	}
+	mux.Handle("/", frontend(directory))
 
 	return corsMiddleware(mux, allowedOrigin)
 }
 
 func corsMiddleware(next http.Handler, allowedOrigin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-		if r.Header.Get("Origin") == allowedOrigin {
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		origin := r.Header.Get("Origin")
+		allowed := false
+		for _, candidate := range strings.Split(allowedOrigin, ",") {
+			if origin != "" && origin == strings.TrimSpace(candidate) {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Idempotency-Key, X-Request-ID")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Request-ID, Idempotency-Replayed, Location, ETag")
 		}
 
 		if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
-			if r.Header.Get("Origin") != allowedOrigin {
+			if !allowed {
 				http.Error(w, "Origin not allowed", http.StatusForbidden)
 				return
 			}

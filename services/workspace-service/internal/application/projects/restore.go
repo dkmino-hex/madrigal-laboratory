@@ -83,10 +83,13 @@ func (s Store) RestoreProject(ctx context.Context, j jobs.Job, progress func(str
 	captureIDs, _ := json.Marshal(capture.CaptureIDs)
 	assemblyIDs, _ := json.Marshal(capture.AssemblyIDs)
 	streamIDs, _ := json.Marshal(capture.StreamIDs)
-	_, err = s.Peers.Restore(ctx, "analysis", j.ProjectID, *j.ResourceID, parts["analysis.zip"], map[string]string{"X-Capture-Id-Map": string(captureIDs), "X-Assembly-Id-Map": string(assemblyIDs), "X-Stream-Id-Map": string(streamIDs)}, recordChild("analysis"))
+	sessionIDs, _ := json.Marshal(capture.SessionIDs)
+	alternatives, _ := json.Marshal(capture.AlternativeIDs)
+	analysis, err := s.Peers.Restore(ctx, "analysis", j.ProjectID, *j.ResourceID, parts["analysis.zip"], map[string]string{"X-Capture-Id-Map": string(captureIDs), "X-Assembly-Id-Map": string(assemblyIDs), "X-Stream-Id-Map": string(streamIDs), "X-Session-Id-Map": string(sessionIDs), "X-Settings-Version-Map": string(settingsHeader), "X-Alternative-Id-Map": string(alternatives)}, recordChild("analysis"))
 	if err != nil {
 		return fmt.Errorf("analysis restore: %w", err)
 	}
+	capture.InterpretationIDs, capture.RevisionIDs, capture.RunIDs = analysis.InterpretationIDs, analysis.RevisionIDs, analysis.RunIDs
 	if err = s.SetImportState(ctx, *j.ResourceID, "VERIFYING", childJobs); err != nil {
 		return err
 	}
@@ -130,6 +133,25 @@ func (s Store) validateRestoredEvidence(ctx context.Context, projectID string, p
 			item["streamOffset"] = row["stream_offset"]
 		}
 		items = append(items, item)
+	}
+	for _, row := range metadata["sourceLinks"] {
+		var link domain.SourceLink
+		raw, ok := row["data_json"].(string)
+		if !ok || json.Unmarshal([]byte(raw), &link) != nil {
+			return ErrInvalidArchive
+		}
+		link, err = link.Remap(projectID, capture)
+		if err != nil {
+			return err
+		}
+		evidence, err := link.Evidence()
+		if err != nil {
+			return ErrInvalidArchive
+		}
+		for _, e := range evidence {
+			item := map[string]any{"captureId": e.CaptureID, "captureSha256": e.CaptureSHA256, "packetNo": e.PacketNo, "frameOffset": e.FrameOffset, "byteLength": e.ByteLength, "assemblyId": e.AssemblyID, "streamId": e.StreamID, "streamOffset": e.StreamOffset}
+			items = append(items, item)
+		}
 	}
 	return s.Peers.ValidateEvidence(ctx, projectID, items)
 }

@@ -1,6 +1,8 @@
 package domain
 
 type Run struct {
+	Historical           bool           `json:"historical,omitempty"`
+	Job                  *Job           `json:"job,omitempty"`
 	RunID                string         `json:"runId"`
 	ProjectID            string         `json:"projectId"`
 	RevisionID           string         `json:"revisionId"`
@@ -17,7 +19,14 @@ type Run struct {
 	CreatedAt            string         `json:"createdAt"`
 }
 
+type CorpusEntry struct {
+	CaptureID  string `json:"captureId"`
+	AssemblyID string `json:"assemblyId"`
+	SHA256     string `json:"sha256,omitempty"`
+}
+
 type RunInput struct {
+	Corpus               []CorpusEntry  `json:"corpus,omitempty"`
 	RevisionID           string         `json:"revisionId"`
 	AssemblyID           string         `json:"assemblyId"`
 	CaptureID            string         `json:"captureId"`
@@ -33,6 +42,7 @@ type Job struct {
 	JobID           string    `json:"jobId"`
 	ProjectID       string    `json:"projectId"`
 	Kind            string    `json:"kind"`
+	Owner           string    `json:"owner"`
 	ResourceID      string    `json:"resourceId"`
 	Status          string    `json:"status"`
 	Stage           string    `json:"stage"`
@@ -74,6 +84,8 @@ type RevisionRow struct {
 	Version          int    `json:"version"`
 	SchemaJSON       string `json:"schemaJson"`
 	CreatedAt        string `json:"createdAt"`
+	ChangeComment    string `json:"changeComment,omitempty"`
+	ParentRevisionID string `json:"parentRevisionId,omitempty"`
 }
 
 type RunRow struct {

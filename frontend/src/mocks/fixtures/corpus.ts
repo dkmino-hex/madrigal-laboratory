@@ -8,7 +8,7 @@ import type {
   Run,
   Session,
   Source,
-} from '../../shared/api/contracts/draft';
+} from '../../shared/api/contracts/models';
 import { decimal, boundedIndex } from '../../shared/model/precision';
 export const projectId = 'demo-laboratory';
 export const fixedTime = '2026-10-11T12:34:56.123456789Z';

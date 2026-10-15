@@ -25,8 +25,10 @@
     "preview": "vite preview --host 127.0.0.1",
     "api:generate": "node scripts/api-contract.mjs generate",
     "api:check": "node scripts/api-contract.mjs check",
-    "verify": "npm run typecheck && npm run lint && npm run test:repository && npm test && npm run build",
-    "test:visual": "playwright test --grep \"Визуальный аудит\""
+    "verify": "npm run typecheck && npm run lint && npm run api:check && npm run test:repository && npm test && npm run build",
+    "test:visual": "playwright test --grep \"Визуальный аудит\"",
+    "test:e2e:integration": "playwright test --config playwright.integration.config.ts",
+    "test:e2e:research": "playwright test --config playwright.research.config.ts"
   },
   "dependencies": {
     "@codemirror/lang-json": "6.0.2",

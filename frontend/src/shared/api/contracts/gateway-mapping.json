@@ -1,1 +1,303 @@
-{}
+{
+  "projects": {
+    "method": "GET",
+    "path": "/api/v1/projects",
+    "operationId": "projects",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "project": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}",
+    "operationId": "project",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "createProject": {
+    "method": "POST",
+    "path": "/api/v1/projects",
+    "operationId": "createProject",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "captures": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/captures",
+    "operationId": "captures",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "uploadCapture": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/captures",
+    "operationId": "uploadCapture",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "importProject": {
+    "method": "POST",
+    "path": "/api/v1/projects/import",
+    "operationId": "importProject",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "exportProject": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/exports",
+    "operationId": "exportProject",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "sessions": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/sessions",
+    "operationId": "sessions",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "assemblies": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/captures/{captureId}/assemblies",
+    "operationId": "assemblies",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "bytes": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/streams/{streamId}/bytes",
+    "operationId": "bytes",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "sources": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/streams/{streamId}/sources",
+    "operationId": "sources",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "packet": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/captures/{captureId}/packets/{packetNo}",
+    "operationId": "packet",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "search": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/streams/{streamId}/search",
+    "operationId": "search",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "settings": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/settings",
+    "operationId": "settings",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "saveSettings": {
+    "method": "PATCH",
+    "path": "/api/v1/projects/{projectId}/settings",
+    "operationId": "saveSettings",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "createAssembly": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/captures/{captureId}/assemblies",
+    "operationId": "createAssembly",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "actions": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/actions",
+    "operationId": "actions",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "importActions": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/action-log",
+    "operationId": "importActions",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "evidence": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/evidence",
+    "operationId": "evidence",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "saveEvidence": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/evidence",
+    "operationId": "saveEvidence",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "hypotheses": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/observations",
+    "operationId": "hypotheses",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "saveHypothesis": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/observations",
+    "operationId": "saveHypothesis",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "deleteHypothesis": {
+    "method": "DELETE",
+    "path": "/api/v1/projects/{projectId}/observations/{hypothesisId}",
+    "operationId": "deleteHypothesis",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "interpretations": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/interpretations",
+    "operationId": "interpretations",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "interpretation": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/interpretations/{interpretationId}",
+    "operationId": "interpretation",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "createInterpretation": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/interpretations",
+    "operationId": "createInterpretation",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "saveRevision": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions",
+    "operationId": "saveRevision",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "preview": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/previews",
+    "operationId": "preview",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "runs": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/runs",
+    "operationId": "runs",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "run": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/runs/{runId}",
+    "operationId": "run",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "createRun": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/runs",
+    "operationId": "createRun",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "results": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/runs/{runId}/results",
+    "operationId": "results",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "job": {
+    "method": "GET",
+    "path": "/api/v1/jobs/{jobId}",
+    "operationId": "job",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "cancelJob": {
+    "method": "POST",
+    "path": "/api/v1/jobs/{jobId}/cancel",
+    "operationId": "cancelJob",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "artifacts": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/artifacts",
+    "operationId": "artifacts",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "createReport": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/reports",
+    "operationId": "createReport",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "session": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/sessions/{sessionId}",
+    "operationId": "session",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "revisions": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/interpretations/{interpretationId}/revisions",
+    "operationId": "revisions",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "patchEvidence": {
+    "method": "PATCH",
+    "path": "/api/v1/projects/{projectId}/evidence/{evidenceId}",
+    "operationId": "patchEvidence",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "patchHypothesis": {
+    "method": "PATCH",
+    "path": "/api/v1/projects/{projectId}/observations/{hypothesisId}",
+    "operationId": "patchHypothesis",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  },
+  "actionImportStatus": {
+    "method": "GET",
+    "path": "/api/v1/projects/{projectId}/action-log/{importId}",
+    "operationId": "actionImportStatus",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "discover": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/discoveries",
+    "operationId": "discover",
+    "contractVersion": "1.0.0",
+    "idempotent": false
+  },
+  "saveAutomaticObservation": {
+    "method": "POST",
+    "path": "/api/v1/projects/{projectId}/observations/automatic",
+    "operationId": "saveAutomaticObservation",
+    "contractVersion": "1.0.0",
+    "idempotent": true
+  }
+}

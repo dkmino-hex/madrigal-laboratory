@@ -26,7 +26,7 @@ type Snapshots struct {
 }
 
 type RestoreMaps struct {
-	Captures, Assemblies, Streams, Settings map[string]string
+	Captures, Assemblies, Streams, Settings, Sessions, Alternatives map[string]string
 }
 
 func (s Snapshots) Create(ctx context.Context, projectID string) (string, error) {
@@ -59,6 +59,10 @@ func (s Snapshots) Create(ctx context.Context, projectID string) (string, error)
 
 func (s Snapshots) Archive(ctx context.Context, id string) ([]byte, error) {
 	return s.Repo.LoadSnapshot(ctx, id)
+}
+
+func (s Snapshots) Mappings(ctx context.Context, project, importID string) (map[string]map[string]string, error) {
+	return s.Repo.ImportMappings(ctx, project, importID)
 }
 
 func (s Snapshots) Restore(ctx context.Context, projectID, importID string, body []byte, maps RestoreMaps) error {
@@ -107,7 +111,7 @@ func (s Snapshots) Restore(ctx context.Context, projectID, importID string, body
 		}
 		maps.Settings[run.SettingsVersion] = meta.SettingsVersion
 	}
-	if err = s.Repo.ImportSnapshot(ctx, projectID, snapshot, maps.Captures, maps.Assemblies, maps.Streams, maps.Settings, importID, digest); err != nil {
+	if err = s.Repo.ImportSnapshot(ctx, projectID, snapshot, maps.Captures, maps.Assemblies, maps.Streams, maps.Settings, importID, digest, maps.Sessions, maps.Alternatives); err != nil {
 		return fmt.Errorf("%w: %s", ErrImportConflict, err)
 	}
 	return nil

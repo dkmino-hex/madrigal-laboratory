@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import * as dto from '../shared/api/contracts/draft';
+import * as dto from '../shared/api/contracts/models';
 import {
   baselineRun,
   capturesFor,

@@ -10,6 +10,7 @@ export default defineConfig({
     baseURL: process.env.MADRIGAL_GATEWAY_URL,
     serviceWorkers: 'block',
     ...devices['Desktop Chrome'],
+    channel: process.env.MADRIGAL_BROWSER_CHANNEL,
     trace: 'retain-on-failure',
   },
 });

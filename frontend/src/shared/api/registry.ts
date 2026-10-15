@@ -1,5 +1,7 @@
 import approvedMapping from './contracts/gateway-mapping.json';
 export const operations = {
+  discover: { owner: 'Analysis', mutation: true },
+  saveAutomaticObservation: { owner: 'Workspace', mutation: true },
   projects: { owner: 'Workspace', mutation: false },
   project: { owner: 'Workspace', mutation: false },
   createProject: { owner: 'Workspace', mutation: true },
@@ -39,14 +41,18 @@ export const operations = {
 } as const;
 export type Operation = keyof typeof operations;
 export type Mapping = {
-  method: 'GET' | 'POST' | 'PUT';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   operationId: string;
   contractVersion: string;
   idempotent: boolean;
 };
-// Только согласованный BASE-02 может заполнить эту карту. Draft-пути недоступны в api.
-export const gatewayMapping: Partial<Record<Operation, Mapping>> = approvedMapping;
+export type WireOperation =
+  Operation | 'session' | 'revisions' | 'patchEvidence' | 'patchHypothesis' | 'actionImportStatus';
+export const gatewayMapping: Partial<Record<WireOperation, Mapping>> = approvedMapping as Record<
+  WireOperation,
+  Mapping
+>;
 export function availability(operation: Operation) {
   return gatewayMapping[operation] ? 'MAPPED' : 'CONTRACT_PENDING';
 }

@@ -44,6 +44,7 @@ func (r *InterpretationRepository) CreateRun(ctx context.Context, project string
 	_, err = tx.ExecContext(ctx, `INSERT INTO analysis_runs (id,revision_id,assembly_id,status,project_id,capture_id,settings_version,job_id,idempotency_key,capture_sha256,capture_engine_version,settings_json,input_manifest_json,request_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, run.RunID, run.RevisionID, run.AssemblyID, run.Status, project, run.CaptureID, run.SettingsVersion, run.JobID, k, run.CaptureSHA256, run.CaptureEngineVersion, run.SettingsJSON, run.InputManifestJSON, run.InputManifestJSON)
 	if err != nil {
 		if key != "" {
+			_ = tx.Rollback()
 			v, e := r.FindRunByKey(ctx, project, key)
 			if e == nil {
 				return v, true, nil
@@ -75,7 +76,7 @@ func (r *InterpretationRepository) GetRun(ctx context.Context, project, id strin
 	var run domain.Run
 	var summary string
 	var created string
-	err := r.db.QueryRowContext(ctx, `SELECT id,project_id,revision_id,assembly_id,capture_id,settings_version,job_id,status,summary_json,created_at,capture_sha256,capture_engine_version,settings_json,input_manifest_json FROM analysis_runs WHERE id=? AND project_id=?`, id, project).Scan(&run.RunID, &run.ProjectID, &run.RevisionID, &run.AssemblyID, &run.CaptureID, &run.SettingsVersion, &run.JobID, &run.Status, &summary, &created, &run.CaptureSHA256, &run.CaptureEngineVersion, &run.SettingsJSON, &run.InputManifestJSON)
+	err := r.db.QueryRowContext(ctx, `SELECT id,project_id,revision_id,assembly_id,capture_id,settings_version,job_id,status,summary_json,created_at,capture_sha256,capture_engine_version,settings_json,input_manifest_json,EXISTS(SELECT 1 FROM revisions pinned JOIN revisions newer ON newer.interpretation_id=pinned.interpretation_id WHERE pinned.id=analysis_runs.revision_id AND newer.version>pinned.version) FROM analysis_runs WHERE id=? AND project_id=?`, id, project).Scan(&run.RunID, &run.ProjectID, &run.RevisionID, &run.AssemblyID, &run.CaptureID, &run.SettingsVersion, &run.JobID, &run.Status, &summary, &created, &run.CaptureSHA256, &run.CaptureEngineVersion, &run.SettingsJSON, &run.InputManifestJSON, &run.Historical)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Run{}, domain.ErrNotFound
 	}
@@ -89,12 +90,25 @@ func (r *InterpretationRepository) GetRun(ctx context.Context, project, id strin
 		return domain.Run{}, e
 	}
 	run.CreatedAt = t.UTC().Format(time.RFC3339)
+	if run.JobID != "" {
+		job, err := r.GetJob(ctx, run.JobID)
+		if err != nil {
+			return domain.Run{}, err
+		}
+		run.Job = &job
+	}
 	return run, nil
 }
 func (r *InterpretationRepository) ListRuns(ctx context.Context, project, status string, limit, offset int) ([]domain.Run, bool, error) {
 	query := `SELECT id FROM analysis_runs WHERE project_id=?`
 	args := []any{project}
-	if status != "" {
+	if status == "cancelled" {
+		query += ` AND EXISTS(SELECT 1 FROM analysis_jobs j WHERE j.run_id=analysis_runs.id AND j.status='CANCELLED')`
+	} else if status == "interrupted" {
+		query += ` AND EXISTS(SELECT 1 FROM analysis_jobs j WHERE j.run_id=analysis_runs.id AND j.stage='INTERRUPTED' AND j.status='FAILED')`
+	} else if status == "failed" {
+		query += ` AND status='failed' AND NOT EXISTS(SELECT 1 FROM analysis_jobs j WHERE j.run_id=analysis_runs.id AND (j.status='CANCELLED' OR j.stage='INTERRUPTED'))`
+	} else if status != "" {
 		query += ` AND status=?`
 		args = append(args, status)
 	}
@@ -142,22 +156,29 @@ func (r *InterpretationRepository) SaveResult(ctx context.Context, id, result st
 	return err
 }
 func (r *InterpretationRepository) Results(ctx context.Context, project, id string) ([]string, error) {
+	out := []string{}
+	err := r.VisitResults(ctx, project, id, func(payload string) error { out = append(out, payload); return nil })
+	return out, err
+}
+
+func (r *InterpretationRepository) VisitResults(ctx context.Context, project, id string, visit func(string) error) error {
 	if _, err := r.GetRun(ctx, project, id); err != nil {
-		return nil, err
+		return err
 	}
 	rows, e := r.db.QueryContext(ctx, `SELECT result_json FROM analysis_results WHERE run_id=? ORDER BY created_at,id`, id)
 	if e != nil {
-		return nil, e
+		return e
 	}
 	defer rows.Close()
-	out := []string{}
 	for rows.Next() {
 		var v string
 		if e = rows.Scan(&v); e != nil {
-			return nil, e
+			return e
 		}
-		out = append(out, v)
+		if e = visit(v); e != nil {
+			return e
+		}
 	}
-	return out, rows.Err()
+	return rows.Err()
 }
 func (r *InterpretationRepository) RecoverRuns(ctx context.Context) error { return r.RecoverJobs(ctx) }

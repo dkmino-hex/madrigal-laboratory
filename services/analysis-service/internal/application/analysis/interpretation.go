@@ -15,18 +15,24 @@ import (
 var ErrInvalidInput = errors.New("invalid input")
 
 type InterpretationService struct {
-	repo Repository
+	repo      Repository
+	workspace Workspace
 }
 
-func NewInterpretationService(repo Repository) *InterpretationService {
-	return &InterpretationService{repo: repo}
+func NewInterpretationService(repo Repository, workspace ...Workspace) *InterpretationService {
+	s := &InterpretationService{repo: repo}
+	if len(workspace) > 0 {
+		s.workspace = workspace[0]
+	}
+	return s
 }
 
 type CreateInterpretationInput struct {
-	ProjectID   string
-	Name        string
-	Description string
-	Schema      json.RawMessage
+	ProjectID      string
+	Name           string
+	Description    string
+	Schema         json.RawMessage
+	IdempotencyKey string
 }
 
 type CreateInterpretationResult struct {
@@ -39,12 +45,21 @@ func (s *InterpretationService) Create(ctx context.Context, input CreateInterpre
 		return nil, fmt.Errorf("%w: project ID is required", ErrInvalidInput)
 	}
 
-	if strings.TrimSpace(input.Name) == "" {
+	if strings.TrimSpace(input.Name) == "" || len(input.Name) > 800 || len(input.Description) > 8000 || !validKey(input.IdempotencyKey) {
 		return nil, fmt.Errorf("%w: name is required", ErrInvalidInput)
 	}
 
 	if err := validateRevision(input.Schema); err != nil {
 		return nil, err
+	}
+	if s.workspace != nil {
+		project, err := s.workspace.Get(ctx, input.ProjectID, "current")
+		if err != nil {
+			return nil, err
+		}
+		if project.Status != "READY" {
+			return nil, fmt.Errorf("%w: project not ready", ErrInvalidInput)
+		}
 	}
 
 	interpretation := &domain.Interpretation{
@@ -61,7 +76,7 @@ func (s *InterpretationService) Create(ctx context.Context, input CreateInterpre
 		SchemaJSON:       string(input.Schema),
 	}
 
-	if err := s.repo.CreateWithRevision(ctx, interpretation, revision); err != nil {
+	if err := s.repo.CreateWithRevision(ctx, interpretation, revision, input.IdempotencyKey); err != nil {
 		return nil, fmt.Errorf("create interpretation with revision: %w", err)
 	}
 
@@ -80,9 +95,10 @@ func (s *InterpretationService) ListByProject(ctx context.Context, projectID str
 }
 
 type CreateRevisionInput struct {
-	ProjectID        string
-	InterpretationID string
-	Revision         json.RawMessage
+	ProjectID                                       string
+	InterpretationID                                string
+	Revision                                        json.RawMessage
+	ChangeComment, ParentRevisionID, IdempotencyKey string
 }
 
 func (s *InterpretationService) CreateRevision(ctx context.Context, input CreateRevisionInput) (*domain.Revision, error) {
@@ -92,8 +108,11 @@ func (s *InterpretationService) CreateRevision(ctx context.Context, input Create
 	if err := validateRevision(input.Revision); err != nil {
 		return nil, err
 	}
-	rev := &domain.Revision{ID: uuid.NewString(), SchemaJSON: string(input.Revision)}
-	if err := s.repo.CreateRevision(ctx, input.ProjectID, input.InterpretationID, rev); err != nil {
+	if len(input.ChangeComment) > 8000 || !validKey(input.IdempotencyKey) {
+		return nil, ErrInvalidInput
+	}
+	rev := &domain.Revision{ID: uuid.NewString(), SchemaJSON: string(input.Revision), ChangeComment: input.ChangeComment, ParentRevisionID: input.ParentRevisionID}
+	if err := s.repo.CreateRevision(ctx, input.ProjectID, input.InterpretationID, rev, input.IdempotencyKey); err != nil {
 		return nil, fmt.Errorf("create revision: %w", err)
 	}
 	return rev, nil
@@ -104,6 +123,18 @@ func validateRevision(data json.RawMessage) error {
 		return fmt.Errorf("%w: %v", ErrInvalidInput, err)
 	}
 	return nil
+}
+
+func validKey(key string) bool {
+	if len(key) > 200 {
+		return false
+	}
+	for _, r := range key {
+		if r < 33 || r > 126 {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *InterpretationService) ListRevisions(ctx context.Context, projectID, interpretationID string, limit, offset int) ([]domain.Revision, bool, error) {
@@ -122,4 +153,8 @@ func (s *InterpretationService) GetRevision(ctx context.Context, projectID, inte
 
 func (s *InterpretationService) CurrentRevisionID(ctx context.Context, interpretationID string) (string, error) {
 	return s.repo.CurrentRevisionID(ctx, interpretationID)
+}
+
+func (s *InterpretationService) Get(ctx context.Context, project, id string) (*domain.Interpretation, error) {
+	return s.repo.GetByID(ctx, project, id)
 }

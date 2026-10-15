@@ -60,6 +60,7 @@ export function Badge({ status, children }: { status: string; children?: ReactNo
     open: 'Открыта',
     supported: 'Поддерживается примерами',
     refuted: 'Опровергнута',
+    inconclusive: 'Недостаточно данных',
   };
   return (
     <span className={'badge ' + kind}>

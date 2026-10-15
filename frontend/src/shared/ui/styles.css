@@ -156,6 +156,288 @@ pre {
 .muted {
   color: var(--muted);
 }
+.panel.guide-intro {
+  border-left: 3px solid var(--accent-text);
+}
+.research-guide {
+  max-width: 1040px;
+}
+.research-steps {
+  list-style: none;
+  counter-reset: research-step;
+  padding: 0;
+}
+.research-steps > li {
+  counter-increment: research-step;
+}
+.research-steps > li > h2::before {
+  content: counter(research-step) '. ';
+  color: var(--accent-text);
+}
+.guide-example,
+.selected-action,
+.schema-field {
+  padding: 12px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+}
+.guide-terms {
+  margin-bottom: 0;
+}
+.guide-terms > div {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 3fr);
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.guide-terms dt {
+  font-weight: 600;
+}
+.guide-terms dd {
+  margin: 0;
+}
+.technical-details {
+  margin: 10px 0;
+  color: var(--muted);
+}
+.technical-details > summary {
+  cursor: pointer;
+}
+.schema-fields {
+  margin-bottom: 20px;
+}
+.research-workflow,
+.comparison-modes,
+.research-hints,
+.research-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.research-workflow {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.research-workflow a {
+  padding: 5px 9px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
+}
+.research-workflow a.active {
+  color: var(--text);
+  border-color: var(--accent-text);
+}
+.research-toolbar,
+.research-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+}
+.research-toolbar > details {
+  flex: 1;
+  min-width: 200px;
+}
+.research-toolbar .field,
+.research-filters .field {
+  min-width: 220px;
+  flex: 1;
+  margin: 0;
+}
+.research-toolbar summary,
+.research-explanations summary {
+  cursor: pointer;
+}
+.research-captures {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.research-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 14px 0;
+}
+.research-summary > span {
+  color: var(--muted);
+}
+.research-explanations {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 14px 0;
+}
+.research-workbench {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  align-items: start;
+}
+.research-matrix-panel {
+  min-width: 0;
+}
+.research-matrix {
+  overflow: auto;
+  max-height: 620px;
+}
+.research-matrix table {
+  width: max-content;
+  min-width: 100%;
+  font-size: 12px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.research-matrix th,
+.research-matrix td {
+  min-width: 24px;
+  padding: 5px 4px;
+  text-align: center;
+  font-family: Consolas, monospace;
+  border-bottom: 1px solid var(--border);
+}
+.research-matrix th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.research-matrix th:first-child,
+.research-matrix td:first-child {
+  position: sticky;
+  left: 0;
+  min-width: 240px;
+  max-width: 300px;
+  text-align: left;
+  background: var(--surface);
+  z-index: 2;
+  font-family: inherit;
+}
+.research-matrix th:first-child {
+  z-index: 3;
+}
+.research-matrix td:nth-child(2),
+.research-matrix td:nth-child(3) {
+  min-width: 90px;
+}
+.research-matrix td:first-child small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+.research-matrix [data-kind='constant'] {
+  color: var(--muted);
+}
+.research-matrix [data-heat='1'] {
+  background: color-mix(in srgb, var(--warning) 8%, var(--surface));
+}
+.research-matrix [data-heat='2'] {
+  background: color-mix(in srgb, var(--warning) 13%, var(--surface));
+}
+.research-matrix [data-heat='3'] {
+  background: color-mix(in srgb, var(--warning) 20%, var(--surface));
+}
+.research-matrix [data-heat='4'] {
+  background: color-mix(in srgb, var(--warning) 27%, var(--surface));
+}
+.research-matrix [data-heat='5'] {
+  background: color-mix(in srgb, var(--warning) 35%, var(--surface));
+}
+.research-matrix [data-kind='partial'] {
+  color: var(--muted);
+  background: repeating-linear-gradient(
+    135deg,
+    transparent,
+    transparent 4px,
+    var(--surface-hover) 4px,
+    var(--surface-hover) 6px
+  );
+}
+.research-matrix [data-candidate='true'] {
+  box-shadow:
+    inset 0 -2px var(--focus),
+    inset 0 2px var(--focus);
+}
+.research-matrix tr[data-example-status='match'] td:nth-child(3) {
+  color: var(--good);
+}
+.research-matrix tr[data-example-status='counterexample'] td:nth-child(3) {
+  color: var(--bad);
+  font-weight: 700;
+}
+.research-legend {
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.research-legend > span {
+  padding: 3px 7px;
+  border-bottom: 2px solid var(--border);
+}
+.research-legend [data-kind='variable'] {
+  border-color: var(--warning);
+}
+.research-legend [data-kind='candidate'] {
+  border-color: var(--focus);
+}
+.research-candidates {
+  max-height: 760px;
+  overflow-y: auto;
+}
+.research-candidate {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.research-candidate[data-active='true'] {
+  border-left: 3px solid var(--focus);
+  padding-left: 10px;
+}
+.research-candidate-pick {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  margin-bottom: 10px;
+}
+.research-candidate-pick span {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.candidate-counterexamples {
+  color: var(--bad);
+  font-size: 12px;
+}
+.automatic-origin {
+  display: block;
+  color: var(--accent-text);
+  margin-top: 8px;
+}
+.automatic-proof-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.hex-byte[data-candidate='true']:not(.selected) {
+  box-shadow: inset 0 -2px var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
+}
+@media (max-width: 1100px) {
+  .research-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .research-candidates {
+    max-height: 440px;
+  }
+}
 .timestamp {
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;

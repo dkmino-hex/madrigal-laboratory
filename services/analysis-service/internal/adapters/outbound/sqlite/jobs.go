@@ -46,6 +46,7 @@ func (r *InterpretationRepository) GetJob(ctx context.Context, id string) (domai
 	} else {
 		return j, e
 	}
+	j.Owner = "Analysis"
 	return j, nil
 }
 func (r *InterpretationRepository) CancelJob(ctx context.Context, id string) (domain.Job, error) {

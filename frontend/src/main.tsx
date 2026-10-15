@@ -11,6 +11,7 @@ import { ApiError } from './shared/api/transport';
 import './shared/ui/styles.css';
 const Projects = lazy(() => import('./pages/Projects'));
 const Overview = lazy(() => import('./pages/Overview'));
+const Guide = lazy(() => import('./pages/Guide'));
 const Traffic = lazy(() => import('./pages/Traffic'));
 const Actions = lazy(() => import('./pages/Actions'));
 const Compare = lazy(() => import('./pages/Compare'));
@@ -81,6 +82,7 @@ const router = createBrowserRouter([
         element: <ProjectLayout />,
         children: [
           { index: true, element: screen(<Overview />) },
+          { path: 'guide', element: screen(<Guide />) },
           { path: 'traffic', element: screen(<Traffic />) },
           { path: 'actions', element: screen(<Actions />) },
           { path: 'compare', element: screen(<Compare />) },

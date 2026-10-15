@@ -53,7 +53,7 @@ func TestSnapshotArchiveAndIdempotentRestore(t *testing.T) {
 	if err != nil || len(archive.File) != 1 || archive.File[0].Name != "analysis.json" {
 		t.Fatalf("invalid archive: %v", err)
 	}
-	destination := newSnapshotRepository(t)
+	destination := repo
 	snapshots = service.Snapshots{Repo: destination}
 	interpretations = service.NewInterpretationService(destination)
 	for i := 0; i < 2; i++ {

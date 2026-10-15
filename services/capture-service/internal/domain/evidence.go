@@ -1,6 +1,9 @@
 package domain
 
 type EvidenceCheck struct {
+	SessionID     string `json:"sessionId,omitempty"`
+	Direction     string `json:"direction,omitempty"`
+	AlternativeID string `json:"alternativeId,omitempty"`
 	Kind          string `json:"kind,omitempty"`
 	CaptureID     string `json:"captureId,omitempty"`
 	CaptureSHA256 string `json:"captureSha256"`

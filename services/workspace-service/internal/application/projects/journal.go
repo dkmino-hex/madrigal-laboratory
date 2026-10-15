@@ -21,7 +21,7 @@ import (
 const maxJournalSize = 16 << 20
 
 func (s Store) AcceptJournal(ctx context.Context, projectID string, in JournalInput, reader io.Reader) (JournalImport, error) {
-	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 255 || in.OffsetNS < -86400e9 || in.OffsetNS > 86400e9 {
+	if strings.TrimSpace(in.Name) == "" || len(in.Name) > 255 || in.OffsetNS < -86400e9 || in.OffsetNS > 86400e9 || in.IdempotencyKey != "" && !domain.ValidIdempotencyKey(in.IdempotencyKey) {
 		return JournalImport{}, ErrInvalid
 	}
 	if in.Timezone == "" {
@@ -95,6 +95,10 @@ func (s Store) ImportJournal(ctx context.Context, j jobs.Job, progress func(stri
 		return err
 	}
 	expected := []string{"capture", "session", "action_id", "start_utc", "end_utc", "action", "parameters", "observed_result"}
+	compact := len(header) == 4
+	if compact {
+		expected = []string{"timestamp", "name", "type", "parameters"}
+	}
 	if len(header) != len(expected) {
 		return ErrInvalid
 	}
@@ -132,8 +136,13 @@ func (s Store) ImportJournal(ctx context.Context, j jobs.Job, progress func(stri
 				line = int64(startLine)
 			}
 			if len(row) != len(expected) {
-				diagnostics = append(diagnostics, map[string]any{"line": line, "message": "expected eight columns"})
+				diagnostics = append(diagnostics, map[string]any{"line": line, "message": fmt.Sprintf("expected %d columns", len(expected))})
 				continue
+			}
+			actionType := ""
+			if compact {
+				actionType = row[2]
+				row = []string{"", "", fmt.Sprint(line), row[0], row[0], row[1], row[3], "null"}
 			}
 			start, e1 := parseJournalTime(row[3], location)
 			end, e2 := parseJournalTime(row[4], location)
@@ -141,8 +150,13 @@ func (s Store) ImportJournal(ctx context.Context, j jobs.Job, progress func(stri
 				diagnostics = append(diagnostics, map[string]any{"line": line, "message": "invalid action, timestamp or JSON"})
 				continue
 			}
-			startNS, endNS := start.UnixNano()+offset, end.UnixNano()+offset
-			err = insert(domain.JournalAction{SourceID: row[2], Line: line, Capture: row[0], Session: row[1], Start: startNS, End: endNS, Name: row[5], Parameters: row[6], Result: row[7]})
+			adjustedStart, adjustedEnd := start.Add(time.Duration(offset)), end.Add(time.Duration(offset))
+			startNS, endNS := adjustedStart.UnixNano(), adjustedEnd.UnixNano()
+			if !time.Unix(0, startNS).Equal(adjustedStart) || !time.Unix(0, endNS).Equal(adjustedEnd) {
+				diagnostics = append(diagnostics, map[string]any{"line": line, "message": "timestamp is outside supported nanosecond range"})
+				continue
+			}
+			err = insert(domain.JournalAction{SourceID: row[2], Line: line, Capture: row[0], Session: row[1], Start: startNS, End: endNS, Name: row[5], Type: actionType, Parameters: row[6], Result: row[7]})
 			if err != nil {
 				diagnostics = append(diagnostics, map[string]any{"line": line, "message": "duplicate action or invalid row"})
 				continue

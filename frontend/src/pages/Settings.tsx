@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useProject } from '../app/Shell';
 import { api } from '../shared/api/client';
 import { queryKey, useCommand } from '../shared/api/query';
-import type { Location, Settings as SettingsModel } from '../shared/api/contracts/draft';
+import type { Location, Settings as SettingsModel } from '../shared/api/contracts/models';
 import {
   Banner,
   Button,

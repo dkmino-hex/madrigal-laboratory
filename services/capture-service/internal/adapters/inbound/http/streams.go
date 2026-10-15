@@ -29,7 +29,7 @@ func registerSessions(mux *http.ServeMux, store captures.Store) {
 		}
 		q := r.URL.Query()
 		filters := map[string]string{}
-		for _, key := range []string{"cursor", "captureId", "assemblyId", "ip", "port", "from", "to"} {
+		for _, key := range []string{"cursor", "captureId", "assemblyId", "ip", "port", "from", "to", "streamId", "q", "defects"} {
 			filters[key] = q.Get(key)
 		}
 

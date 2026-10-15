@@ -7,6 +7,7 @@ import (
 )
 
 type Repository interface {
+	GetByID(context.Context, string, string) (*domain.Interpretation, error)
 	SchemaByRevision(ctx context.Context, project, revision string) (string, error)
 	CreateRun(ctx context.Context, project string, in domain.RunInput, key string) (domain.Run, bool, error)
 	GetRun(ctx context.Context, project, id string) (domain.Run, error)
@@ -14,8 +15,9 @@ type Repository interface {
 	SetRunStatus(ctx context.Context, id, status string, summary string) error
 	SaveResult(ctx context.Context, id, result string) error
 	Results(ctx context.Context, project, id string) ([]string, error)
+	VisitResults(ctx context.Context, project, id string, visit func(string) error) error
 	RecoverRuns(ctx context.Context) error
-	CreateWithRevision(ctx context.Context, interpretation *domain.Interpretation, revision *domain.Revision) error
+	CreateWithRevision(ctx context.Context, interpretation *domain.Interpretation, revision *domain.Revision, keys ...string) error
 	ListByProject(ctx context.Context, projectID string) ([]domain.Interpretation, error)
 	GetJob(ctx context.Context, id string) (domain.Job, error)
 	CancelJob(ctx context.Context, id string) (domain.Job, error)
@@ -25,15 +27,16 @@ type Repository interface {
 	JobCancelRequested(ctx context.Context, id string) (bool, error)
 	RecoverJobs(ctx context.Context) error
 	QueuedRuns(ctx context.Context) ([]domain.Run, error)
-	CreateRevision(ctx context.Context, projectID, interpretationID string, revision *domain.Revision) error
+	CreateRevision(ctx context.Context, projectID, interpretationID string, revision *domain.Revision, keys ...string) error
 	ListRevisions(ctx context.Context, projectID, interpretationID string, limit, offset int) ([]domain.Revision, bool, error)
 	GetRevision(ctx context.Context, projectID, interpretationID, revisionID string) (*domain.Revision, error)
 	CurrentRevisionID(ctx context.Context, interpretationID string) (string, error)
 	ExportSnapshot(ctx context.Context, project string) (domain.Snapshot, error)
-	ImportSnapshot(ctx context.Context, dest string, s domain.Snapshot, captures, assemblies, streams, settings map[string]string, importID, digest string) error
+	ImportSnapshot(ctx context.Context, dest string, s domain.Snapshot, captures, assemblies, streams, settings map[string]string, importID, digest string, sessions ...map[string]string) error
 	SaveSnapshot(ctx context.Context, id, project string, data []byte) error
 	LoadSnapshot(ctx context.Context, id string) ([]byte, error)
 	ImportSeen(ctx context.Context, project, importID, digest string) (bool, error)
+	ImportMappings(ctx context.Context, project, importID string) (map[string]map[string]string, error)
 }
 
 type Capture interface {

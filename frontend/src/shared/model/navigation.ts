@@ -1,4 +1,4 @@
-import { locationSchema, type Location } from '../api/contracts/draft';
+import { locationSchema, type Location } from '../api/contracts/models';
 export function sourceLink(
   location: Location,
   context?: { runId?: string; revisionId?: string; returnTo?: string },

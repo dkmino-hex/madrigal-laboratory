@@ -19,5 +19,5 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	return service.Run(service.Env("GATEWAY_HTTP_ADDR", "127.0.0.1:8080"), api.New(workspace, capture, analysis, service.Env("FRONTEND_ORIGIN", "http://localhost:5173")))
+	return service.Run(service.Env("GATEWAY_HTTP_ADDR", "127.0.0.1:8080"), api.New(workspace, capture, analysis, service.Env("FRONTEND_ORIGIN", "http://localhost:5173,http://127.0.0.1:5173"), service.Env("FRONTEND_DIR", "")))
 }

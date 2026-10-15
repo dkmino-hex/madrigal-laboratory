@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Location } from '../../shared/api/contracts/draft';
+import type { Location } from '../../shared/api/contracts/models';
 import { api } from '../../shared/api/client';
 import { queryKey } from '../../shared/api/query';
 import { validateSearch } from '../../shared/model/bytes';

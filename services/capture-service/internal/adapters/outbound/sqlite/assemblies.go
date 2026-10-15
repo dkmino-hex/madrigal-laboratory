@@ -16,6 +16,12 @@ import (
 
 const engineVersion = "capture-0.1"
 
+func (s Store) AssemblySettings(ctx context.Context, project, id string) (json.RawMessage, error) {
+	var settings string
+	err := s.DB.QueryRowContext(ctx, `SELECT settings_json FROM assemblies WHERE project_id=? AND id=?`, project, id).Scan(&settings)
+	return json.RawMessage(settings), err
+}
+
 func (s Store) SaveImport(ctx context.Context, j jobs.Job, c Capture, settingsVersion string, settings json.RawMessage, assemblyID string, packets []reassembly.Packet, sessions []reassembly.Session) error {
 	total := int64(len(packets))
 	tx, err := s.DB.BeginTx(ctx, nil)
@@ -166,7 +172,7 @@ func (s Store) LoadAssembly(ctx context.Context, j jobs.Job) (string, []reassemb
 	if err := s.DB.QueryRowContext(ctx, "SELECT capture_id FROM assemblies WHERE id=?1 AND project_id=?2 AND status='BUILDING'", *j.ResourceID, j.ProjectID).Scan(&captureID); err != nil {
 		return "", nil, err
 	}
-	rows, err := s.DB.QueryContext(ctx, "SELECT packet_no,interface_no,timestamp_seconds,timestamp_nanoseconds,captured_length,original_length,frame,src_ip,dst_ip,src_port,dst_port,tcp_seq,tcp_ack,tcp_flags,payload_offset,payload_length FROM packets WHERE capture_id=?1 ORDER BY packet_no", captureID)
+	rows, err := s.DB.QueryContext(ctx, "SELECT packet_no,interface_no,timestamp_seconds,timestamp_nanoseconds,captured_length,original_length,frame,src_ip,dst_ip,src_port,dst_port,tcp_seq,tcp_ack,tcp_flags,payload_offset,payload_length,checksum_status FROM packets WHERE capture_id=?1 ORDER BY packet_no", captureID)
 	if err != nil {
 		return "", nil, err
 	}
@@ -177,7 +183,7 @@ func (s Store) LoadAssembly(ctx context.Context, j jobs.Job) (string, []reassemb
 		var nanos int
 		var srcIP, dstIP sql.NullString
 		var srcPort, dstPort, seq, ack, flags, payloadOffset, payloadLength sql.NullInt64
-		if err := rows.Scan(&p.Number, &p.InterfaceNo, &seconds, &nanos, &p.CapturedLength, &p.OriginalLength, &p.Frame, &srcIP, &dstIP, &srcPort, &dstPort, &seq, &ack, &flags, &payloadOffset, &payloadLength); err != nil {
+		if err := rows.Scan(&p.Number, &p.InterfaceNo, &seconds, &nanos, &p.CapturedLength, &p.OriginalLength, &p.Frame, &srcIP, &dstIP, &srcPort, &dstPort, &seq, &ack, &flags, &payloadOffset, &payloadLength, &p.ChecksumStatus); err != nil {
 			rows.Close()
 			return "", nil, err
 		}

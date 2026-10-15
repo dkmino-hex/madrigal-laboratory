@@ -82,7 +82,7 @@ func New(s projects.Store) http.Handler {
 			fail(w, projects.ErrInvalid)
 			return
 		}
-		page, err := s.List(r.Context(), r.URL.Query().Get("cursor"), limit)
+		page, err := s.List(r.Context(), r.URL.Query().Get("cursor"), limit, r.URL.Query().Get("q"))
 		if err != nil {
 			fail(w, err)
 			return
@@ -124,6 +124,7 @@ func New(s projects.Store) http.Handler {
 		httpapi.JSON(w, 200, context)
 	})
 	registerResearch(mux, s, fail)
+	registerViews(mux, s, fail)
 	registerObservations(mux, s, fail)
 	registerArtifactDownload(mux, s)
 	mux.HandleFunc("POST /api/v1/projects/{projectId}/reports", func(w http.ResponseWriter, r *http.Request) {
@@ -209,7 +210,7 @@ func registerResearch(mux *http.ServeMux, s projects.Store, fail func(http.Respo
 				return
 			}
 		}
-		imp, err := s.AcceptJournal(r.Context(), r.PathValue("projectId"), projects.JournalInput{Timezone: r.FormValue("timezone"), OffsetNS: offset, Name: h.Filename}, f)
+		imp, err := s.AcceptJournal(r.Context(), r.PathValue("projectId"), projects.JournalInput{Timezone: r.FormValue("timezone"), OffsetNS: offset, Name: h.Filename, IdempotencyKey: r.Header.Get("Idempotency-Key")}, f)
 		if err != nil {
 			fail(w, err)
 			return
@@ -223,7 +224,7 @@ func registerResearch(mux *http.ServeMux, s projects.Store, fail func(http.Respo
 			fail(w, projects.ErrInvalid)
 			return
 		}
-		q := projects.ActionQuery{Cursor: r.URL.Query().Get("cursor"), Name: r.URL.Query().Get("type"), Limit: limit}
+		q := projects.ActionQuery{Cursor: r.URL.Query().Get("cursor"), Name: r.URL.Query().Get("type"), Search: r.URL.Query().Get("q"), Limit: limit}
 		for _, v := range []struct {
 			key    string
 			target **int64

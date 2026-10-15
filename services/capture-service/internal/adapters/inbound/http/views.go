@@ -14,6 +14,19 @@ import (
 type viewRange = domain.ViewRange
 
 func registerViews(mux *http.ServeMux, store captures.Store) {
+	mux.HandleFunc("GET /internal/v1/projects/{projectId}/captures/{captureId}/research-data", func(w http.ResponseWriter, r *http.Request) {
+		budget, err := positiveInt(r.URL.Query().Get("maxBytes"), 256<<10, 1<<20)
+		if err != nil || budget < 1 {
+			httpapi.Error(w, 400, "INVALID_REQUEST", "invalid research budget")
+			return
+		}
+		data, err := store.ResearchData(r.Context(), r.PathValue("projectId"), r.PathValue("captureId"), r.URL.Query().Get("assemblyId"), budget)
+		if err != nil {
+			captureError(w, err)
+			return
+		}
+		httpapi.JSON(w, 200, data)
+	})
 	mux.HandleFunc("POST /internal/v1/projects/{projectId}/assembly-views", func(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Ranges []viewRange `json:"ranges"`
@@ -72,6 +85,11 @@ func registerViews(mux *http.ServeMux, store captures.Store) {
 		items := make([]map[string]any, 0)
 		for i := start; i < int64(len(ranges)) && i < start+limit; i++ {
 			entry := ranges[i]
+			metadata, err := store.StreamReadContext(r.Context(), entry.AssemblyID, entry.StreamID)
+			if err != nil {
+				captureError(w, err)
+				return
+			}
 			intervals, err := store.StreamIntervalsUnchecked(r.Context(), entry.AssemblyID, entry.StreamID, entry.Offset, entry.Length)
 			if err != nil {
 				captureError(w, err)
@@ -82,7 +100,7 @@ func registerViews(mux *http.ServeMux, store captures.Store) {
 				captureError(w, err)
 				return
 			}
-			items = append(items, map[string]any{"assemblyId": entry.AssemblyID, "streamId": entry.StreamID, "offset": entry.Offset, "length": entry.Length, "intervals": intervals, "sources": sources})
+			items = append(items, map[string]any{"assemblyId": entry.AssemblyID, "streamId": entry.StreamID, "offset": entry.Offset, "length": entry.Length, "intervals": intervals, "sources": sources, "captureId": metadata["captureId"], "captureName": metadata["captureName"], "direction": metadata["direction"]})
 		}
 		next := ""
 		if start+int64(len(items)) < int64(len(ranges)) {

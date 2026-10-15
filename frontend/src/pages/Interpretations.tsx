@@ -38,7 +38,7 @@ export default function Interpretations() {
     <>
       <PageHeading
         title="Интерпретации"
-        subtitle="Рабочие модели структуры. Сохранение создаёт новую неизменяемую ревизию."
+        subtitle="Схемы чтения сообщений: какие байты образуют поле и как получить из них значение."
         actions={
           <Modal
             title="Новая интерпретация"
@@ -94,6 +94,16 @@ export default function Interpretations() {
           </Modal>
         }
       />
+      <section className="panel guide-intro">
+        <h2>Что здесь задаётся?</h2>
+        <p>
+          Для каждого поля указываются имя, положение в сообщении и тип. Например, два байта могут
+          читаться как целое число. Схему можно задать вручную или создать из кандидата в
+          автоматическом сравнении. Сохранение создаёт новую версию — ревизию.
+        </p>
+        <Link to={'/projects/' + projectId + '/guide#fields'}>Пример поля и его проверки →</Link>{' '}
+        <Link to={'/projects/' + projectId + '/compare'}>Найти кандидаты автоматически →</Link>
+      </section>
       <QueryState pending={query.isPending} error={query.error} retry={() => void query.refetch()}>
         {query.data?.items.length ? (
           <section className="panel">

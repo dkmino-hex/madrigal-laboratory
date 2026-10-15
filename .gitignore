@@ -16,6 +16,11 @@
 !/docs/architecture.md
 !/docs/refactoring-verification.md
 !/docs/integration.md
+!/docs/user-guide.md
+!/docs/requirements-audit.md
+!/docs/research-automation.md
+!/docs/analysis-schema.md
+/output/
 /bin/
 /dist/
 /coverage.out

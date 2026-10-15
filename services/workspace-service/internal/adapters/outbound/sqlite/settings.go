@@ -7,7 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dkmino-hex/madrigal-laboratory/platform/database"
 	"github.com/dkmino-hex/madrigal-laboratory/platform/identifier"
@@ -49,6 +51,32 @@ func (s Store) SettingsContext(ctx context.Context, projectID, version string) (
 func (s Store) UpdateSettings(ctx context.Context, projectID string, settings map[string]any, key string) (SettingsVersion, bool, error) {
 	if projectID == "" || settings == nil || !domain.ValidIdempotencyKey(key) {
 		return SettingsVersion{}, false, ErrInvalid
+	}
+	for name, value := range settings {
+		switch name {
+		case "timeZone":
+			zone, ok := value.(string)
+			if !ok {
+				return SettingsVersion{}, false, ErrInvalid
+			}
+			if _, err := time.LoadLocation(zone); err != nil {
+				return SettingsVersion{}, false, ErrInvalid
+			}
+		case "offsetNanoseconds":
+			raw, ok := value.(string)
+			offset, err := strconv.ParseInt(raw, 10, 64)
+			if !ok || err != nil || offset < -86400e9 || offset > 86400e9 {
+				return SettingsVersion{}, false, ErrInvalid
+			}
+		case "checksum":
+			if value != "warn" && value != "strict" && value != "ignore" {
+				return SettingsVersion{}, false, ErrInvalid
+			}
+		case "overlap":
+			if value != "preserve-alternatives" {
+				return SettingsVersion{}, false, ErrInvalid
+			}
+		}
 	}
 	data, err := json.Marshal(settings)
 	if err != nil {

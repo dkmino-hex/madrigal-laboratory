@@ -1,4 +1,4 @@
-import type { ByteWindow, Location, Segment } from '../api/contracts/draft';
+import type { ByteWindow, Location, Segment } from '../api/contracts/models';
 import { boundedIndex, decimal, intersect } from './precision';
 
 export type Cell =

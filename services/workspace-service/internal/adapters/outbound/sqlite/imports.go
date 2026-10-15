@@ -83,7 +83,7 @@ func (s Store) RegisterProjectImport(ctx context.Context, importID, final, hash 
 	if strings.TrimSpace(name) == "" {
 		return nil, ErrInvalidArchive
 	}
-	if _, err = tx.ExecContext(ctx, "INSERT INTO projects(id,name,status) VALUES(?1,?2,'IMPORTING')", projectID, name); err != nil {
+	if _, err = tx.ExecContext(ctx, "INSERT INTO projects(id,name,status,description) VALUES(?1,?2,'IMPORTING',?3)", projectID, name, optionalText(workspace["project"][0], "description")); err != nil {
 		return nil, err
 	}
 	settingsMap := map[string]string{}
@@ -188,7 +188,7 @@ func (s Store) RestoreWorkspaceRows(ctx context.Context, projectID string, data 
 			}
 			captureID = mapped
 		}
-		_, err = tx.ExecContext(ctx, `INSERT INTO actions(id,project_id,journal_import_id,source_action_id,source_line,capture_path,capture_id,session_label,start_unix_ns,end_unix_ns,name,parameters_json,observed_result_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)`, id, projectID, journalIDs[journal], row["source_action_id"], line, row["capture_path"], captureID, row["session_label"], start, end, row["name"], row["parameters_json"], row["observed_result_json"])
+		_, err = tx.ExecContext(ctx, `INSERT INTO actions(id,project_id,journal_import_id,source_action_id,source_line,capture_path,capture_id,session_label,start_unix_ns,end_unix_ns,name,parameters_json,observed_result_json,type) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)`, id, projectID, journalIDs[journal], row["source_action_id"], line, row["capture_path"], captureID, row["session_label"], start, end, row["name"], row["parameters_json"], row["observed_result_json"], optionalText(row, "type"))
 		if err != nil {
 			return err
 		}
@@ -204,7 +204,14 @@ func (s Store) RestoreWorkspaceRows(ctx context.Context, projectID string, data 
 				return ErrInvalidArchive
 			}
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO observations(id,project_id,kind,text,status,action_id) VALUES(?1,?2,?3,?4,?5,?6)", id, projectID, row["kind"], row["text"], row["status"], action)
+		generation := optionalText(row, "generation_json")
+		if generation == "" {
+			generation = "{}"
+		}
+		if !json.Valid([]byte(generation)) {
+			return ErrInvalidArchive
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO observations(id,project_id,kind,text,status,action_id,basis,generation_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)", id, projectID, row["kind"], row["text"], row["status"], action, optionalText(row, "basis"), generation)
 		if err != nil {
 			return err
 		}
@@ -247,6 +254,9 @@ func (s Store) RestoreWorkspaceRows(ctx context.Context, projectID string, data 
 		if err != nil {
 			return err
 		}
+	}
+	if err = restoreLinks(ctx, tx, projectID, data, capture, actionIDs, observationIDs); err != nil {
+		return err
 	}
 	if _, err = tx.ExecContext(ctx, "UPDATE project_imports SET workspace_restored=1 WHERE project_id=?1", projectID); err != nil {
 		return err
